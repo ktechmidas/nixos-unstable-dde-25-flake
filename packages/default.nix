@@ -26,7 +26,7 @@ let
 
       #### PROTOCOL DEFINITIONS (Layer 1)
       # deepin-wayland-protocols = callPackage ./library/deepin-wayland-protocols { };
-      # treeland-protocols = callPackage ./library/treeland-protocols { };
+      treeland-protocols = callPackage ./library/treeland-protocols { };
 
       #### COMPOSITOR (Layer 6 — X11 path)
       # deepin-kwin = callPackage ./core/deepin-kwin { };
@@ -43,12 +43,12 @@ let
       deepin-service-manager = callPackage ./core/deepin-service-manager { };
       # dde-polkit-agent needs dde-shell — package later
       # dde-polkit-agent = callPackage ./core/dde-polkit-agent { };
-      # dde-application-manager = callPackage ./core/dde-application-manager { };
+      dde-application-manager = callPackage ./core/dde-application-manager { };
       # dde-appearance = callPackage ./core/dde-appearance { };
 
       #### SHELL (Layer 10)
-      # dde-tray-loader = callPackage ./core/dde-tray-loader { };
-      # dde-shell = callPackage ./core/dde-shell { };
+      dde-tray-loader = callPackage ./core/dde-tray-loader { };
+      dde-shell = callPackage ./core/dde-shell { };
 
       #### DESKTOP APPS (Layer 11)
       # dde-launchpad = callPackage ./core/dde-launchpad { };
