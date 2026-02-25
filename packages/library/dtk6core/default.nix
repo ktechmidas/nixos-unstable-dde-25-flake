@@ -14,13 +14,13 @@
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "dtk6core";
-  version = "6.0.50";
+  version = "6.0.50-unstable-2025-05-08";
 
   src = fetchFromGitHub {
     owner = "linuxdeepin";
     repo = "dtk6core";
-    rev = finalAttrs.version;
-    hash = "sha256-ZSUSA2f6uPHjl5itxrdggRVoPeK+KucXcOaWqrE1FSI=";
+    rev = "52314ed4a90e33450cc319f5ec05463626e33e5b";
+    hash = "sha256-y6gIARrR+M95bz0hU6HRy45TDU2oC1GiULknzLOpZQg=";
   };
 
   patches = [
@@ -55,7 +55,7 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   cmakeFlags = [
-    "-DDTK_VERSION=${finalAttrs.version}"
+    "-DDTK_VERSION=6.0.50"
     "-DBUILD_DOCS=ON"
     "-DBUILD_EXAMPLES=OFF"
     "-DQCH_INSTALL_DESTINATION=${placeholder "doc"}/share/doc"
@@ -72,7 +72,6 @@ stdenv.mkDerivation (finalAttrs: {
 
   outputs = [
     "out"
-    "dev"
     "doc"
   ];
 

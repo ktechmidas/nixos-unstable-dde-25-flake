@@ -15,9 +15,9 @@ let
       dtkcommon = callPackage ./library/dtkcommon { };
       dtk6log = callPackage ./library/dtk6log { };
       dtk6core = callPackage ./library/dtk6core { };
-      # dtk6gui = callPackage ./library/dtk6gui { };
-      # dtk6widget = callPackage ./library/dtk6widget { };
-      # dtk6declarative = callPackage ./library/dtk6declarative { };
+      dtk6gui = callPackage ./library/dtk6gui { };
+      dtk6widget = callPackage ./library/dtk6widget { };
+      dtk6declarative = callPackage ./library/dtk6declarative { };
       # dtk6systemsettings = callPackage ./library/dtk6systemsettings { };
 
       #### PLATFORM INTEGRATION (Layer 5)

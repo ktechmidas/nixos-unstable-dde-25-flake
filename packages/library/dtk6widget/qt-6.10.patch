@@ -1,0 +1,40 @@
+diff --git a/src/widgets/dtabbar.cpp b/src/widgets/dtabbar.cpp
+index 9a890a7f..599e46cd 100644
+--- a/src/widgets/dtabbar.cpp
++++ b/src/widgets/dtabbar.cpp
+@@ -699,7 +699,7 @@ void DTabBarPrivate::layoutTab(int index)
+     if (tab->leftWidget) {
+         QRect rect = style()->subElementRect(QStyle::SE_TabBarTabLeftButton, &opt, this);
+         QPoint p = rect.topLeft();
+-        if ((index == d->pressedIndex) || d->paintWithOffsets) {
++        if (index == d->pressedIndex) {
+             if (vertical)
+                 p.setY(p.y() + d->at(index)->dragOffset);
+             else
+@@ -711,7 +711,7 @@ void DTabBarPrivate::layoutTab(int index)
+     if (tab->rightWidget) {
+         QRect rect = style()->subElementRect(QStyle::SE_TabBarTabRightButton, &opt, this);
+         QPoint p = rect.topLeft();
+-        if ((index == d->pressedIndex) || d->paintWithOffsets) {
++        if (index == d->pressedIndex) {
+             if (vertical)
+                 p.setY(p.y() + tab->dragOffset);
+             else
+@@ -1234,7 +1234,7 @@ void DTabBarPrivate::paintEvent(QPaintEvent *e)
+         // Force text centering
+         tab.rightButtonSize = QSize();
+
+-        if (d->paintWithOffsets && d->at(i)->dragOffset != 0) {
++        if (d->at(i)->dragOffset != 0) {
+             if (vertical) {
+                 tab.rect.moveTop(tab.rect.y() + d->at(i)->dragOffset);
+             } else {
+@@ -1286,7 +1286,7 @@ void DTabBarPrivate::paintEvent(QPaintEvent *e)
+         // Force text centering
+         tab.rightButtonSize = QSize();
+
+-        if (d->paintWithOffsets && d->at(selected)->dragOffset != 0) {
++        if (d->at(selected)->dragOffset != 0) {
+             if (vertical) {
+                 tab.rect.moveTop(tab.rect.y() + d->at(selected)->dragOffset);
+             } else {
