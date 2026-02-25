@@ -31,14 +31,17 @@ let
       #### COMPOSITOR (Layer 6 — X11 path)
       # deepin-kwin = callPackage ./core/deepin-kwin { };
 
+      #### SCHEMAS & DATA
+      deepin-desktop-schemas = callPackage ./misc/deepin-desktop-schemas { };
+
       #### GO SERVICES (Layer 8)
       # dde-api = callPackage ./go-package/dde-api { };
       # dde-daemon = callPackage ./go-package/dde-daemon { };
-      # deepin-desktop-schemas = callPackage ./go-package/deepin-desktop-schemas { };
       # startdde = callPackage ./go-package/startdde { };
 
       #### CORE SERVICES (Layer 9)
-      # deepin-service-manager = callPackage ./core/deepin-service-manager { };
+      deepin-service-manager = callPackage ./core/deepin-service-manager { };
+      # dde-polkit-agent needs dde-shell — package later
       # dde-polkit-agent = callPackage ./core/dde-polkit-agent { };
       # dde-application-manager = callPackage ./core/dde-application-manager { };
       # dde-appearance = callPackage ./core/dde-appearance { };
@@ -54,7 +57,7 @@ let
       # dde-session-shell = callPackage ./core/dde-session-shell { };
 
       #### SESSION (Layer 12)
-      # dde-session = callPackage ./core/dde-session { };
+      dde-session = callPackage ./core/dde-session { };
       # dde-session-ui = callPackage ./core/dde-session-ui { };
 
       #### ARTWORK
@@ -65,7 +68,7 @@ let
       # dde-account-faces = callPackage ./artwork/dde-account-faces { };
 
       #### MISC
-      # deepin-desktop-base = callPackage ./misc/deepin-desktop-base { };
+      deepin-desktop-base = callPackage ./misc/deepin-desktop-base { };
     };
 in
 lib.makeScope pkgs.newScope packages
