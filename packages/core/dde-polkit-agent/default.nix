@@ -8,6 +8,7 @@
   kdePackages,
   dtk6core,
   dtk6widget,
+  dde-shell,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
@@ -33,6 +34,7 @@ stdenv.mkDerivation (finalAttrs: {
     kdePackages.polkit-qt-1
     dtk6core
     dtk6widget
+    dde-shell
   ];
 
   cmakeFlags = [

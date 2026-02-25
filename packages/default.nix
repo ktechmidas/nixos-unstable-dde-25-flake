@@ -41,8 +41,7 @@ let
 
       #### CORE SERVICES (Layer 9)
       deepin-service-manager = callPackage ./core/deepin-service-manager { };
-      # dde-polkit-agent needs dde-shell — package later
-      # dde-polkit-agent = callPackage ./core/dde-polkit-agent { };
+      dde-polkit-agent = callPackage ./core/dde-polkit-agent { };
       dde-application-manager = callPackage ./core/dde-application-manager { };
       # dde-appearance = callPackage ./core/dde-appearance { };
 
@@ -51,7 +50,7 @@ let
       dde-shell = callPackage ./core/dde-shell { };
 
       #### DESKTOP APPS (Layer 11)
-      # dde-launchpad = callPackage ./core/dde-launchpad { };
+      dde-launchpad = callPackage ./core/dde-launchpad { };
       # dde-control-center = callPackage ./core/dde-control-center { };
       # dde-file-manager = callPackage ./core/dde-file-manager { };
       # dde-session-shell = callPackage ./core/dde-session-shell { };
@@ -61,10 +60,10 @@ let
       # dde-session-ui = callPackage ./core/dde-session-ui { };
 
       #### ARTWORK
-      # deepin-icon-theme = callPackage ./artwork/deepin-icon-theme { };
+      deepin-icon-theme = callPackage ./artwork/deepin-icon-theme { };
       # deepin-desktop-theme = callPackage ./artwork/deepin-desktop-theme { };
-      # deepin-sound-theme = callPackage ./artwork/deepin-sound-theme { };
-      # deepin-wallpapers = callPackage ./artwork/deepin-wallpapers { };
+      deepin-sound-theme = callPackage ./artwork/deepin-sound-theme { };
+      deepin-wallpapers = callPackage ./artwork/deepin-wallpapers { };
       # dde-account-faces = callPackage ./artwork/dde-account-faces { };
 
       #### MISC
