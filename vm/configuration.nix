@@ -23,12 +23,15 @@
     extraGroups = [ "wheel" "video" "audio" ];
   };
 
-  services.getty.autologinUser = "test";
+  # Enable DDE
+  services.desktopManager.deepin.enable = true;
 
-  # TODO: Enable DDE once packages are building
-  # services.desktopManager.deepin.enable = true;
-  # services.xserver.enable = true;
-  # services.displayManager.lightdm.enable = true;
+  # Display manager
+  services.displayManager.defaultSession = "deepin";
+  services.displayManager.autoLogin = {
+    enable = true;
+    user = "test";
+  };
 
   system.stateVersion = "25.11";
 }
