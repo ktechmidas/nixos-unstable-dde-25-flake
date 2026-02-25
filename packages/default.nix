@@ -24,6 +24,9 @@ let
       qt6platform-plugins = callPackage ./library/qt6platform-plugins { };
       qt6integration = callPackage ./library/qt6integration { };
 
+      #### SUPPORT LIBRARIES
+      gsettings-qt6 = callPackage ./library/gsettings-qt6 { };
+
       #### PROTOCOL DEFINITIONS (Layer 1)
       # deepin-wayland-protocols = callPackage ./library/deepin-wayland-protocols { };
       treeland-protocols = callPackage ./library/treeland-protocols { };
@@ -43,7 +46,7 @@ let
       deepin-service-manager = callPackage ./core/deepin-service-manager { };
       dde-polkit-agent = callPackage ./core/dde-polkit-agent { };
       dde-application-manager = callPackage ./core/dde-application-manager { };
-      # dde-appearance = callPackage ./core/dde-appearance { };
+      dde-appearance = callPackage ./core/dde-appearance { };
 
       #### SHELL (Layer 10)
       dde-tray-loader = callPackage ./core/dde-tray-loader { };
