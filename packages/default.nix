@@ -21,8 +21,8 @@ let
       # dtk6systemsettings = callPackage ./library/dtk6systemsettings { };
 
       #### PLATFORM INTEGRATION (Layer 5)
-      # qt6platform-plugins = callPackage ./library/qt6platform-plugins { };
-      # qt6integration = callPackage ./library/qt6integration { };
+      qt6platform-plugins = callPackage ./library/qt6platform-plugins { };
+      qt6integration = callPackage ./library/qt6integration { };
 
       #### PROTOCOL DEFINITIONS (Layer 1)
       # deepin-wayland-protocols = callPackage ./library/deepin-wayland-protocols { };
