@@ -39,11 +39,11 @@ stdenv.mkDerivation (finalAttrs: {
       --replace-fail 'if (WERROR)' 'if (ENABLE_WERROR)'
 
     substituteInPlace src/gsettings-qt.pc.in \
-      --replace-fail "''${prefix}/@CMAKE_INSTALL_LIBDIR@" '@CMAKE_INSTALL_FULL_LIBDIR@' \
-      --replace-fail "''${prefix}/@QT_INCLUDE_DIR@/QGSettings" '@QT_FULL_INCLUDE_DIR@/QGSettings'
+      --replace-fail "\''${prefix}/@CMAKE_INSTALL_LIBDIR@" '@CMAKE_INSTALL_FULL_LIBDIR@' \
+      --replace-fail "\''${prefix}/@QT_INCLUDE_DIR@/QGSettings" '@QT_FULL_INCLUDE_DIR@/QGSettings'
 
     substituteInPlace GSettings/CMakeLists.txt \
-      --replace-fail "''${CMAKE_INSTALL_LIBDIR}/qt''${QT_VERSION_MAJOR}/qml" "$out/${qt6Packages.qtbase.qtQmlPrefix}"
+      --replace-fail "\''${CMAKE_INSTALL_LIBDIR}/qt\''${QT_VERSION_MAJOR}/qml" "$out/${qt6Packages.qtbase.qtQmlPrefix}"
   '';
 
   preBuild = ''

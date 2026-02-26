@@ -1,0 +1,29 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 50cf07fc3..6a79b9bbd 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -70,6 +70,9 @@ find_package(Qt${QT_MAJOR_VERSION} REQUIRED COMPONENTS
+     Widgets
+     LinguistTools
+ )
++if(Qt${QT_MAJOR_VERSION}_VERSION VERSION_GREATER_EQUAL 6.10)
++  find_package(Qt${QT_MAJOR_VERSION} COMPONENTS CorePrivate GuiPrivate REQUIRED)
++endif()
+
+ if (QT_MAJOR_VERSION EQUAL "5")
+     find_package(Qt5 ${QT_MIN_VERSION} CONFIG REQUIRED COMPONENTS X11Extras)
+diff --git a/src/plugins/qpa/integration.cpp b/src/plugins/qpa/integration.cpp
+index a4c9e9558..cd12a3689 100644
+--- a/src/plugins/qpa/integration.cpp
++++ b/src/plugins/qpa/integration.cpp
+@@ -35,7 +35,11 @@
+ #else
+ #include <QtGui/private/qgenericunixeventdispatcher_p.h>
+ #include <QtGui/private/qgenericunixfontdatabase_p.h>
++#if QT_VERSION < QT_VERSION_CHECK(6, 10, 0)
+ #include <QtGui/private/qgenericunixthemes_p.h>
++#else
++#include <QtGui/private/qgenericunixtheme_p.h>
++#endif
+ #include <QtGui/private/qunixeventdispatcher_qpa_p.h>
+ #endif

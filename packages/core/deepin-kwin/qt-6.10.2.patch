@@ -1,0 +1,23 @@
+diff --git a/src/plugins/qpa/integration.cpp b/src/plugins/qpa/integration.cpp
+index a4c9e9558..9cff3ec12 100644
+--- a/src/plugins/qpa/integration.cpp
++++ b/src/plugins/qpa/integration.cpp
+@@ -104,6 +108,9 @@ bool Integration::hasCapability(Capability cap) const
+         return false;
+     case MultipleWindows:
+     case NonFullScreenWindows:
++#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 2)
++    case OffscreenSurface:
++#endif
+         return true;
+     case RasterGLSurface:
+         return false;
+@@ -151,7 +158,7 @@ QPlatformWindow *Integration::createPlatformWindow(QWindow *window) const
+
+ QPlatformOffscreenSurface *Integration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
+ {
+-    return new OffscreenSurface(surface);
++    return new KWin::QPA::OffscreenSurface(surface);
+ }
+
+ QPlatformFontDatabase *Integration::fontDatabase() const

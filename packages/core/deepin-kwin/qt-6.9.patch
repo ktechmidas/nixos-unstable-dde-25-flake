@@ -1,0 +1,55 @@
+From 664808264f5a49c306834565d0e0c631a8feda27 Mon Sep 17 00:00:00 2001
+From: Felix Yan <felixonmars@archlinux.org>
+Date: Thu, 25 Sep 2025 04:14:21 +0800
+Subject: [PATCH] fix: build against Qt 6.9+
+
+QGenericUnixServices was renamed to QDesktopUnixServices in Qt 6.9.
+---
+ src/plugins/qpa/integration.cpp | 4 ++++
+ src/plugins/qpa/integration.h   | 8 +++++++-
+ 2 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/plugins/qpa/integration.cpp b/src/plugins/qpa/integration.cpp
+index 69f9680549..a4c9e95586 100644
+--- a/src/plugins/qpa/integration.cpp
++++ b/src/plugins/qpa/integration.cpp
+@@ -60,7 +60,11 @@ Integration::Integration()
+     , QPlatformIntegration()
+     , m_fontDb(new QGenericUnixFontDatabase())
+     , m_nativeInterface(new QPlatformNativeInterface())
++#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
+     , m_services(new QGenericUnixServices())
++#else
++    , m_services(new QDesktopUnixServices())
++#endif
+ {
+ }
+
+diff --git a/src/plugins/qpa/integration.h b/src/plugins/qpa/integration.h
+index b24aa280f1..548696a565 100644
+--- a/src/plugins/qpa/integration.h
++++ b/src/plugins/qpa/integration.h
+@@ -14,8 +14,10 @@
+ #include <QObject>
+ #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+ #include <QtServiceSupport/private/qgenericunixservices_p.h>
+-#else
++#elif QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
+ #include <QtGui/private/qgenericunixservices_p.h>
++#else
++#include <QtGui/private/qdesktopunixservices_p.h>
+ #endif
+ #include <qpa/qplatformintegration.h>
+
+@@ -63,7 +65,11 @@ private Q_SLOTS:
+     std::unique_ptr<QPlatformNativeInterface> m_nativeInterface;
+     QPlatformScreen *m_dummyScreen = nullptr;
+     QHash<Output *, Screen *> m_screens;
++#if QT_VERSION < QT_VERSION_CHECK(6, 9, 0)
+     std::unique_ptr<QGenericUnixServices> m_services;
++#else
++    std::unique_ptr<QDesktopUnixServices> m_services;
++#endif
+ };
+
+ }

@@ -28,19 +28,22 @@ let
       gsettings-qt6 = callPackage ./library/gsettings-qt6 { };
 
       #### PROTOCOL DEFINITIONS (Layer 1)
-      # deepin-wayland-protocols = callPackage ./library/deepin-wayland-protocols { };
+      deepin-wayland-protocols = callPackage ./library/deepin-wayland-protocols { };
       treeland-protocols = callPackage ./library/treeland-protocols { };
 
       #### COMPOSITOR (Layer 6 — X11 path)
-      # deepin-kwin = callPackage ./core/deepin-kwin { };
+      deepin-kwin = callPackage ./core/deepin-kwin { };
 
       #### SCHEMAS & DATA
       deepin-desktop-schemas = callPackage ./misc/deepin-desktop-schemas { };
 
+      #### TOOLS
+      deepin-gettext-tools = callPackage ./tools/deepin-gettext-tools { };
+
       #### GO SERVICES (Layer 8)
-      # dde-api = callPackage ./go-package/dde-api { };
-      # dde-daemon = callPackage ./go-package/dde-daemon { };
-      # startdde = callPackage ./go-package/startdde { };
+      dde-api = callPackage ./go-package/dde-api { };
+      dde-daemon = callPackage ./go-package/dde-daemon { };
+      startdde = callPackage ./go-package/startdde { };
 
       #### CORE SERVICES (Layer 9)
       deepin-service-manager = callPackage ./core/deepin-service-manager { };

@@ -1,0 +1,61 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 214feadb6..d49457e53 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -22,6 +22,10 @@ else()
+ endif()
+
+ option(BUILD_TESTING "Build the testing tree" OFF)
++option(ENABLE_KGLOBALACCEL "Enable kglobalaccel support" ON)
++if (ENABLE_KGLOBALACCEL)
++    add_definitions(-DWITH_KGLOBALACCEL)
++endif()
+
+ if (BUILD_ON_V25)
+   set(QT_MAJOR_VERSION "6")
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index c106593cd..7d95bd017 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -434,10 +434,14 @@ add_subdirectory(plugins)
+
+ target_link_libraries(kwin_wayland
+     KWinQpaPlugin
+-    KF${KF_MAJOR_VERSION}GlobalAccelKWinPlugin
+     KF${KF_MAJOR_VERSION}WindowSystemKWinPlugin
+     KF${KF_MAJOR_VERSION}IdleTimeKWinPlugin
+ )
++if (ENABLE_KGLOBALACCEL)
++    target_link_libraries(kwin_wayland
++        KF${KF_MAJOR_VERSION}GlobalAccelKWinPlugin
++    )
++endif()
+
+ add_custom_target(
+     KWinDBusInterfaces
+diff --git a/src/main_wayland.cpp b/src/main_wayland.cpp
+index 190137f69..43172cd84 100644
+--- a/src/main_wayland.cpp
++++ b/src/main_wayland.cpp
+@@ -62,7 +62,9 @@
+ #endif
+
+ Q_IMPORT_PLUGIN(KWinIntegrationPlugin)
++#ifdef WITH_KGLOBALACCEL
+ Q_IMPORT_PLUGIN(KGlobalAccelImpl)
++#endif
+ Q_IMPORT_PLUGIN(KWindowSystemKWinPlugin)
+ Q_IMPORT_PLUGIN(KWinIdleTimePoller)
+ #if PipeWire_FOUND
+diff --git a/src/plugins/CMakeLists.txt b/src/plugins/CMakeLists.txt
+index bb89cefd0..e80bbed77 100644
+--- a/src/plugins/CMakeLists.txt
++++ b/src/plugins/CMakeLists.txt
+@@ -1,4 +1,6 @@
+-add_subdirectory(kglobalaccel)
++if (ENABLE_KGLOBALACCEL)
++    add_subdirectory(kglobalaccel)
++endif()
+ add_subdirectory(qpa)
+ add_subdirectory(idletime)
+ add_subdirectory(windowsystem)
