@@ -36,6 +36,15 @@ stdenv.mkDerivation (finalAttrs: {
     "-DCMAKE_INSTALL_SYSCONFDIR=${placeholder "out"}/etc"
   ];
 
+  # Fix hardcoded /usr/bin paths in systemd service files
+  postInstall = ''
+    find $out -name "*.service" -exec sed -i \
+      -e "s|/usr/bin/deepin-service-manager|$out/bin/deepin-service-manager|g" \
+      -e "s|/usr/bin/|$out/bin/|g" \
+      -e "s|/usr/lib/|$out/lib/|g" \
+      {} +
+  '';
+
   meta = {
     description = "D-Bus service manager for Deepin Desktop";
     homepage = "https://github.com/linuxdeepin/deepin-service-manager";

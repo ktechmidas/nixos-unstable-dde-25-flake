@@ -48,6 +48,7 @@ let
 
       #### CORE SERVICES (Layer 9)
       deepin-service-manager = callPackage ./core/deepin-service-manager { };
+      dde-app-services = callPackage ./core/dde-app-services { };
       dde-polkit-agent = callPackage ./core/dde-polkit-agent { };
       dde-application-manager = callPackage ./core/dde-application-manager { };
       dde-appearance = callPackage ./core/dde-appearance { };

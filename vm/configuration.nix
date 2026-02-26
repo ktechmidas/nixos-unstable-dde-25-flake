@@ -42,5 +42,19 @@
   # Allow test user passwordless sudo
   security.sudo.wheelNeedsPassword = false;
 
+  # Serial console for debugging boot hangs
+  boot.kernelParams = [ "console=ttyS0,115200" ];
+  systemd.services."serial-getty@ttyS0".enable = true;
+
+  # SSH for remote debugging
+  services.openssh = {
+    enable = true;
+    settings.PermitRootLogin = "no";
+    settings.PasswordAuthentication = true;
+  };
+  virtualisation.vmVariant.virtualisation.forwardPorts = [
+    { from = "host"; host.port = 2222; guest.port = 22; }
+  ];
+
   system.stateVersion = "25.11";
 }

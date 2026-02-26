@@ -22,6 +22,8 @@
   libxcb,
   xcbutilwm,
   libxtst,
+  qt6platform-plugins,
+  qt6integration,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
@@ -59,6 +61,8 @@ stdenv.mkDerivation (finalAttrs: {
     libxcb
     xcbutilwm
     libxtst
+    qt6platform-plugins
+    qt6integration
   ];
 
   propagatedBuildInputs = [
@@ -85,6 +89,13 @@ stdenv.mkDerivation (finalAttrs: {
     find . -name "CMakeLists.txt" -exec \
       sed -i "s|\''${SYSTEMD_USER_UNIT_DIR}|$out/lib/systemd/user|g" {} +
   '';
+
+  # Inject QML paths for DTK modules that install to non-standard lib/qt6/qml.
+  # dde-launchpad QML is added via environment.sessionVariables in the module
+  # (can't be a buildInput here due to circular dependency).
+  qtWrapperArgs = [
+    "--prefix" "QML2_IMPORT_PATH" ":" "${dtk6declarative}/lib/qt6/qml"
+  ];
 
   # Ensure systemd user units don't go to systemd's store path
   SYSTEMD_USER_UNIT_DIR = "${placeholder "out"}/lib/systemd/user";

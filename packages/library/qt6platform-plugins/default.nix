@@ -90,6 +90,17 @@ stdenv.mkDerivation (finalAttrs: {
     "-DQT_XCB_PRIVATE_HEADERS=${qtXcbPrivateHeaders}"
   ];
 
+  # Move plugins to the standard NixOS Qt6 plugin path so wrapQtAppsHook
+  # and Qt plugin discovery find them. The upstream installs to lib/qt6/plugins
+  # but NixOS uses lib/qt-6/plugins.
+  postInstall = ''
+    if [ -d "$out/lib/qt6/plugins" ] && [ ! -d "$out/${qt6Packages.qtbase.qtPluginPrefix}" ]; then
+      mkdir -p "$out/$(dirname "${qt6Packages.qtbase.qtPluginPrefix}")"
+      mv "$out/lib/qt6/plugins" "$out/${qt6Packages.qtbase.qtPluginPrefix}"
+      rmdir "$out/lib/qt6" 2>/dev/null || true
+    fi
+  '';
+
   meta = {
     description = "Qt6 platform integration plugin for DDE";
     homepage = "https://github.com/linuxdeepin/qt6platform-plugins";
