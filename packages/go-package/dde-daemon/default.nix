@@ -109,6 +109,11 @@ buildGoModule rec {
     find . -name "*.go" -exec sed -i \
       's|"/usr/share/uadp"|"/var/lib/dde-daemon/uadp"|g' {} + || true
 
+    # Disable deepin-system-power-control (UOS-specific binary, not in upstream packages)
+    # NixOS uses power-profiles-daemon instead
+    sed -i 's|"/usr/sbin/deepin-system-power-control"|"/run/current-system/sw/bin/true"|' \
+      system/power1/manager_powersave.go || true
+
     patchShebangs .
   '';
 

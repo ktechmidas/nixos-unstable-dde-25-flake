@@ -35,7 +35,7 @@
         }
       );
 
-      # NixOS module (placeholder for now)
+      # NixOS module
       nixosModules.deepin = import ./modules/deepin.nix { inherit self; };
 
       # Quick VM test

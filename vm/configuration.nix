@@ -28,6 +28,12 @@
   # Enable DDE
   services.desktopManager.deepin.enable = true;
 
+  # Basic apps for testing (deepin-terminal is still Qt5, can't use it)
+  environment.systemPackages = with pkgs; [
+    xterm
+    nano
+  ];
+
   # Display manager — use LightDM with autologin
   services.xserver.displayManager.lightdm = {
     enable = true;

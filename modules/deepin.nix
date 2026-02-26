@@ -160,6 +160,9 @@ in
         "${deepin.dde-launchpad}/lib/qt6/qml"
         "${pkgs.qt6Packages.qt5compat}/${pkgs.qt6Packages.qtbase.qtQmlPrefix}"
       ];
+      # Cursor theme from deepin-icon-theme
+      XCURSOR_THEME = "bloom";
+      XCURSOR_SIZE = "24";
       # DDE needs to find its own schemas
       DDE_KWIN_DIR = "${deepin.deepin-kwin}";
     };
@@ -268,6 +271,7 @@ in
     xdg.portal = {
       enable = lib.mkDefault true;
       extraPortals = lib.mkDefault [ pkgs.xdg-desktop-portal-gtk ];
+      config.common.default = lib.mkDefault "*";
     };
   };
 }
