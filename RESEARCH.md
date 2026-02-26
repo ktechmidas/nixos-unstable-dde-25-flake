@@ -397,36 +397,36 @@ LAYER 12 - Session:
 
 ---
 
-## 10. Strategy for Revival
+## 10. Strategy for Revival (Progress Updated 2026-02-26)
 
-### Phase 1: Foundation (DTK6 + minimal desktop)
+### Phase 1: Foundation (DTK6 + minimal desktop) — COMPLETE
 **Goal**: Get DTK6 libraries building and a minimal X11 session working
 
-1. Fork or start fresh flake based on martyr-deepin/dde-nixos structure
-2. Port DTK6 libraries first: dtkcommon -> dtkcore -> dtkgui -> dtkwidget -> dtkdeclarative
-3. Port qt6platform-plugins + qt6integration
-4. Port deepin-kwin (X11 window manager, skip Treeland initially)
-5. Port Go services: dde-api -> dde-daemon -> startdde
-6. Get a basic X11 session booting
+1. ~~Fork or start fresh flake~~ — Created fresh flake at `ktechmidas/nixos-unstable-dde-25-flake`
+2. ~~Port DTK6 libraries~~ — dtkcommon, dtk6log, dtk6core, dtk6gui, dtk6widget, dtk6declarative all building
+3. ~~Port qt6platform-plugins + qt6integration~~ — Building, with custom Qt XCB private headers extraction
+4. ~~Port deepin-kwin~~ — Building, KDE Frameworks 6 based
+5. ~~Port Go services~~ — dde-api, dde-daemon, startdde all building with `buildGoModule`
+6. ~~Get a basic X11 session booting~~ — Full session running in VM and added to real hardware config
 
-### Phase 2: Desktop Shell
+### Phase 2: Desktop Shell — COMPLETE
 **Goal**: Functional desktop with dock, launcher, and settings
 
-7. Port dde-shell (the new unified shell)
-8. Port dde-tray-loader
-9. Port dde-launchpad
-10. Port dde-control-center
-11. Port dde-session + dde-session-shell
-12. Port dde-file-manager
+7. ~~Port dde-shell~~ — Building, main panel/taskbar
+8. ~~Port dde-tray-loader~~ — Building, system tray plugins
+9. ~~Port dde-launchpad~~ — Building, application launcher
+10. ~~Port dde-control-center~~ — Building, system settings
+11. ~~Port dde-session + dde-session-shell~~ — Building. dde-lock works; greeter skipped (needs liblightdm-qt6-3)
+12. **Port dde-file-manager** — SKIPPED (heavy deps: libdfm6-*, libdeepin-pdfium; security concerns). Desktop wallpaper plugin lives here.
 
-### Phase 3: Polish & Applications
+### Phase 3: Polish & Applications — IN PROGRESS
 **Goal**: Full desktop experience
 
-13. Port remaining services (appearance, network, clipboard, etc.)
-14. Port applications (terminal, editor, calculator, etc.)
-15. Port artwork (themes, icons, wallpapers)
-16. Write NixOS module
-17. Set up CI/binary cache
+13. ~~Port remaining services (appearance, polkit, app-manager, etc.)~~ — DONE
+14. Port applications (terminal, editor, calculator, etc.) — BLOCKED (deepin-terminal/editor are Qt5 only)
+15. ~~Port artwork (themes, icons, wallpapers, sounds, account faces)~~ — DONE (5 artwork packages)
+16. ~~Write NixOS module~~ — DONE (`services.desktopManager.deepin.enable`)
+17. Set up CI/binary cache — NOT STARTED
 
 ### Phase 4: Wayland (Optional/Future)
 **Goal**: Treeland support
@@ -435,46 +435,48 @@ LAYER 12 - Session:
 19. Port ddm
 20. Add Wayland session option to NixOS module
 
-### Key Technical Decisions
-- **Use `makeScope` with `qt6Packages.newScope`** (proven pattern from original flake)
-- **Target nixos-unstable** for latest Qt6
-- **Start with X11 only** - Treeland is still preview even upstream
-- **Borrow Arch patches heavily** - They've solved many of the same problems
-- **Binary cache from day 1** - Garnix or similar, these builds are heavy
-- **VM testing** - Include QEMU VM config like original flake
+### Key Technical Decisions (Confirmed)
+- **Use `lib.makeScope pkgs.newScope`** with explicit qt6Packages references (NOT `qt6Packages.newScope`)
+- **No `dev` output** for DTK packages (breaks cmake target discovery)
+- **Target nixos-unstable** — Qt 6.10.x
+- **X11 only** — Treeland skipped, deepin-kwin used
+- **Arch patches used selectively** — Qt 6.10 compat, feature disabling
+- **VM testing** — QEMU with virgl 3D acceleration
+- **kwinrc default** — Forces compositing on (workaround for missing DConfig schemas)
 
-### What We Can Borrow from Arch
-- Path fixup patterns (`/usr/libexec` -> appropriate NixOS paths)
-- Feature disabling flags (`-DDISABLE_AUTHENTICATION=YES`, etc.)
-- Qt version compatibility patches
-- OS detection workarounds
-- GCC compatibility patches
-- Knowledge of which components are actually needed vs. Deepin-OS-specific
-
-### NixOS-Specific Challenges to Solve
-- FHS path patching (the #1 challenge historically)
-- Go module packaging (dde-daemon, startdde use Go)
-- D-Bus service registration
-- systemd user service integration
-- XDG desktop session registration
-- GSettings schema compilation
-- Qt plugin path discovery
-- Runtime path resolution (components finding each other)
+### Solved NixOS-Specific Challenges
+- **FHS path patching** — Extensive sed/substituteInPlace across all packages (biggest: dde-daemon ~80+ paths)
+- **Go module packaging** — All 3 Go packages build with `buildGoModule` + computed `vendorHash`
+- **D-Bus service registration** — 10+ packages registered via `services.dbus.packages`
+- **systemd user service integration** — 6 packages in `systemd.packages`, 3 manual system services
+- **XDG desktop session registration** — `services.displayManager.sessionPackages = [ dde-session ]`
+- **GSettings schema compilation** — Combined schemas from 3 packages into single compiled database
+- **Qt/QML plugin path discovery** — `QT_PLUGIN_PATH`, `QT_QPA_PLATFORM_PLUGIN_PATH`, `QML2_IMPORT_PATH`
+- **Runtime path resolution** — `/run/current-system/sw` paths, environment.pathsToLink for deepin-daemon/api libs
+- **DConfig daemon** — dde-dconfig-daemon runs as `deepin-daemon` system user
+- **Compositing** — kwinrc default bypasses broken DConfig-based compositing toggle
 
 ---
 
-## 11. Open Questions
+## 11. Open Questions (Updated 2026-02-26)
 
-1. **Has ktechmidas made any progress?** Their fork says "dde 25 on NixOS" - worth reaching out
-2. **What security fixes has DDE 25 actually shipped?** Need to audit CVE-2025-23222 status
-3. **Is wineee willing to advise?** They have deep knowledge of the NixOS-specific challenges
-4. **What's the minimum viable desktop?** Can we skip some components entirely?
-5. **Qt 6.8 availability in nixpkgs?** Need to verify nixos-unstable has Qt >= 6.8
-6. **wlroots 0.19 in nixpkgs?** Needed for Treeland (phase 4)
-7. **Should we join the Telegram porting group?** BLumia recommended it for known pitfalls
-8. **Go module hashes** - All Go components need vendorHash computed
-9. **dde-api-proxy** - Should we package it at all given the security issues?
-10. **Linglong/Linyaps** - Skip entirely for NixOS (we have Nix)
+**Answered:**
+1. ~~Has ktechmidas made any progress?~~ **YES — this IS ktechmidas's project.** Full DDE 25 flake running with 36 packages.
+2. ~~What security fixes has DDE 25 actually shipped?~~ Still needs formal audit, but we've avoided dde-api-proxy entirely.
+3. ~~Is wineee willing to advise?~~ Not yet contacted.
+4. ~~What's the minimum viable desktop?~~ **ANSWERED:** 36 packages get a functional desktop. dde-file-manager can be skipped (loses wallpaper plugin). Go services (dde-api, dde-daemon, startdde) are all needed.
+5. ~~Qt 6.8 availability in nixpkgs?~~ **Qt 6.10.x** is in nixos-unstable. Required some patches (dtk6widget paintWithOffsets, dtk6core QDirIterator).
+6. ~~Go module hashes~~ **All computed.** dde-api, dde-daemon, startdde all build with `buildGoModule`.
+7. **dde-api-proxy** — Not packaged, not needed for basic desktop.
+8. **Linglong/Linyaps** — Skipped entirely.
+
+**Still Open:**
+1. **Security audit** — openSUSE findings need checking against DDE 25 codebase
+2. **wlroots 0.19 in nixpkgs?** — Needed for future Treeland/Wayland support
+3. **Telegram porting group** — Could be valuable for dde-file-manager packaging tips
+4. **Desktop wallpaper** — `org.deepin.ds.desktop` plugin ships with dde-file-manager. Need to package it or find a workaround.
+5. **liblightdm-qt6-3** — Canonical's LightDM has no Qt6 support. Deepin must have an internal solution. Greeter not needed since GDM works.
+6. **Binary cache / CI** — No CI yet, builds are heavy
 
 ---
 

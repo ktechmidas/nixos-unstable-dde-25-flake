@@ -7,17 +7,34 @@
 
 ---
 
-## Current Status: 23 Packages Building
+## Current Status: 36 Packages Building, Full Desktop Session Running
 
-All 23 packages build successfully against nixos-unstable with Qt 6.10.
-A NixOS module and QEMU VM configuration are in place.
-The full VM system toplevel builds.
+All 36 packages build successfully against nixos-unstable with Qt 6.10.
+The full DDE 25 desktop session runs in a QEMU VM with zero failed services
+(both system-level and user-level). The NixOS module has been added to real
+hardware configuration alongside GNOME, selectable from GDM session menu.
+
+**What works:**
+- Full session startup chain: dde-session → deepin-kwin → dde-shell
+- Dock/panel (dde-shell), launcher (dde-launchpad), system tray (dde-tray-loader)
+- Lock screen (dde-lock from dde-session-shell)
+- Control center (dde-control-center)
+- All Go services (dde-api, dde-daemon, startdde)
+- Bloom cursor theme from deepin-icon-theme
+- Wallpapers, sounds, icons, desktop themes
+- Compositing via kwinrc default (workaround for missing DConfig schemas)
+
+**Known limitations:**
+- Desktop background is black — the `org.deepin.ds.desktop` wallpaper plugin ships with `dde-file-manager` which is not yet packaged
+- Dock renders transparent/translucent, may appear invisible against black background in VM (should work on real hardware with proper compositing)
+- `lightdm-deepin-greeter` not built — needs `liblightdm-qt6-3` which doesn't exist in nixpkgs
+- No deepin-terminal or deepin-editor — both are still Qt5/DTK5, incompatible with Qt6-only stack
 
 ---
 
 ## Package Inventory
 
-### Layer 1-4: DTK6 Libraries
+### Layer 1-4: DTK6 Libraries (6 packages)
 
 | Package | Version | Hash | Patches | Notes |
 |---------|---------|------|---------|-------|
@@ -28,57 +45,90 @@ The full VM system toplevel builds.
 | dtk6widget | 6.0.50 | `sha256-ycVxz/rsKFW/sina5MQ78JiReFdC7Y5h232O3YLd0X8=` | `qt-6.10.patch` | Qt 6.10 removed `QTabBarPrivate::paintWithOffsets` |
 | dtk6declarative | 6.0.50 | `sha256-K/cbbEJUqug1fpNCMGxS5AzbEJVcVv/A/B/dgjaWfpg=` | None | QML toolkit, uses qt5compat + qtshadertools |
 
-### Layer 5: Platform Integration
+### Layer 5: Platform Integration (2 packages)
 
 | Package | Version | Hash | Patches | Notes |
 |---------|---------|------|---------|-------|
 | qt6platform-plugins | 6.0.50 | `sha256-3Dgm/cVL22fDQAer9EqvRNJKlRwIT1Z62RPiJ7bhgPI=` | None | Custom `runCommand` to extract Qt XCB private headers from qtbase source |
 | qt6integration | 6.0.50 | `sha256-h/UGDpEyRpqAbMksLVRpOLLeMDlOJNiznEFvc+NQON8=` | None | Uses `lxqt.libqtxdg` for XDG icon loading |
 
-### Support Libraries
+### Support Libraries (4 packages)
 
 | Package | Version | Hash | Source | Notes |
 |---------|---------|------|--------|-------|
 | gsettings-qt6 | 1.1.0 | `sha256-NUrJ3xQnef7TwPa7AIZaiI7TAkMe+nhuEQ/qC1H1Ves=` | UBports GitLab | Qt6 build of gsettings-qt, same source as nixpkgs Qt5 version with `-DENABLE_QT6=ON` |
+| deepin-pw-check | 6.0.21 | — | GitHub | Password strength checking library, needed by dde-control-center |
+| deepin-wayland-protocols | 1.10.14 | — | GitHub | Wayland protocol XML files |
 | treeland-protocols | 0.5.4 | `sha256-tp2KvfjGJ4pMtTSXTt0aQ6Wm2Yz2GYFeV6nS3vVqDmM=` | GitHub | Wayland protocol XML files |
 
-### Data & Schemas
+### Data & Schemas (2 packages)
 
 | Package | Version | Hash | Notes |
 |---------|---------|------|-------|
 | deepin-desktop-schemas | 6.0.13 | `sha256-2WGrda800xIFlOrSkbEeF4MKTDIhYMhwervB1xu2nZA=` | Go-based build tool skipped, schemas installed directly |
 | deepin-desktop-base | 2025.12.22 | `sha256-uPQ2eE/Yz0k2K3YB1LxZNlQCY8pzCij+jI2pHdooUK4=` | Makefile-based, `DESTDIR=$(out) PREFIX=/` |
 
-### Core Services
+### Build Tools (1 package)
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| deepin-gettext-tools | 1.0.11 | Perl/Python build tool for polkit policy translation. Required by all Go packages at build time. |
+
+### Go Services — Layer 8 (3 packages)
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| dde-api | 6.0.35 | D-Bus API library, 10 binaries. `buildGoModule`. |
+| dde-daemon | 6.1.75 | Central system/session daemon, 15 binaries. `buildGoModule`. Patched to disable UOS-specific `deepin-system-power-control`. |
+| startdde | 6.1.6 | Session starter. `buildGoModule`. |
+
+### Window Manager — Layer 6 (1 package)
+
+| Package | Version | Notes |
+|---------|---------|-------|
+| deepin-kwin | 5.14.5.1 | KWin fork for DDE. Depends on KDE Frameworks 6. Uses `kdePackages.kwin` as base. |
+
+### Core Services — Layer 9 (6 packages)
 
 | Package | Version | Hash | Patches | Notes |
 |---------|---------|------|---------|-------|
 | deepin-service-manager | 1.0.21 | `sha256-D3igB2sb3Tiqa5gY0ZyOwczMMh6ZMo/gpvLycgZv1LY=` | None | D-Bus service lifecycle manager |
-| dde-session | 2.0.17 | `sha256-LHAk6A+c1E2+nqQhlxoxkw882iiM0tF5iARfAeLZRD4=` | sed `/etc/` paths | Hardcoded `/etc` in CMakeLists across multiple subdirs |
+| dde-app-services | 1.0.28 | — | None | Provides `dde-dconfig-daemon` |
+| dde-session | 2.0.17 | `sha256-LHAk6A+c1E2+nqQhlxoxkw882iiM0tF5iARfAeLZRD4=` | sed `/etc/` paths | Session entry point, systemd user target chain |
 | dde-polkit-agent | 6.0.18 | `sha256-G08zjak34V0Ps+c560vDfILGNMEppBXTJw13s9fgeqM=` | None | Uses `kdePackages.polkit-qt-1`, depends on dde-shell |
-| dde-application-manager | 1.2.45 | `sha256-HeHVjO3+sKwnkMbA19XbIVpR6iqpOKxk2w0VbxTgmZ0=` | sed `/etc/` paths | v1.2.45 already has Qt 6.10 WaylandClientPrivate fix (do NOT apply Arch sed) |
+| dde-application-manager | 1.2.45 | `sha256-HeHVjO3+sKwnkMbA19XbIVpR6iqpOKxk2w0VbxTgmZ0=` | sed `/etc/` paths | v1.2.45 already has Qt 6.10 WaylandClientPrivate fix |
 | dde-appearance | 1.1.78 | `sha256-Ytd/OENzW+I6wx14QVrL1JMvKJxJKV4F/Bn7/yUuLCY=` | sed `/etc/`, `/usr/share`, systemd paths, tzdata | KF6WindowSystem + KF6Config + KF6GlobalAccel, gsettings-qt6 |
 
-### Shell Framework
+### Shell Framework — Layer 10 (2 packages)
 
 | Package | Version | Hash | Patches | Notes |
 |---------|---------|------|---------|-------|
 | dde-tray-loader | 2.0.25 | `sha256-LUHBQ93URRuVcEGybza/XMEevNytkyThdMBLmX5i6Zw=` | None | Needs KF6 (`kdePackages.kwindowsystem`), extensive X11 deps |
 | dde-shell | 2.0.29 | `sha256-UgDYaBXZ0MSw0ain0U/Tf6YbxrJ+kSNIiXhf0QUbHX4=` | sed `/etc/`, systemd user unit path | The main panel/taskbar, depends on tray-loader + app-manager + treeland-protocols |
 
-### Desktop Applications
+### Desktop Applications — Layer 11 (3 packages)
 
 | Package | Version | Hash | Notes |
 |---------|---------|------|-------|
 | dde-launchpad | 2.0.26 | `sha256-8eI2czqvSjQvuzlLIRylcNo0Iots5w2eCeXgIWltqD4=` | Application launcher, depends on dde-shell + dde-application-manager |
+| dde-control-center | — | — | System settings, depends on dde-shell, deepin-pw-check |
+| dde-session-shell | unstable | — | Only dde-lock built (greeter needs liblightdm-qt6-3). Pinned to commit. CMake patched to remove LightDM link from dde-lock. |
 
-### Artwork
+### Session — Layer 12 (1 package)
 
 | Package | Version | Hash | Notes |
 |---------|---------|------|-------|
-| deepin-icon-theme | 2025.12.04 | `sha256-s3VlR6HMKC4vsh4MX0KmS8tMKMVpxK81gAGHV/QVUY8=` | Makefile-based, needs gtk3 for `gtk-update-icon-cache` |
+| dde-session-ui | 1.0.12 | — | Shutdown dialog, OSD, welcome screen. Provides D-Bus services for lock/shutdown fronts. |
+
+### Artwork (5 packages)
+
+| Package | Version | Hash | Notes |
+|---------|---------|------|-------|
+| deepin-icon-theme | 2025.12.04 | `sha256-s3VlR6HMKC4vsh4MX0KmS8tMKMVpxK81gAGHV/QVUY8=` | Includes bloom cursor theme |
+| deepin-desktop-theme | — | — | Desktop themes |
 | deepin-sound-theme | 15.10.6 | `sha256-BvG/ygZfM6sDuDSzAqwCzDXGT/bbA6Srlpg3br117OU=` | Makefile-based, `dontBuild = true` |
 | deepin-wallpapers | 1.7.25 | `sha256-eMtk/uWop2i6J61FVwlXzkjxBe0LwnirxEb40AbyPfs=` | Makefile-based (NOT CMake despite initial assumption) |
+| dde-account-faces | — | — | User avatar images |
 
 ---
 
@@ -156,6 +206,26 @@ Passed to cmake via `-DQT_XCB_PRIVATE_HEADERS=${qtXcbPrivateHeaders}`.
 **Problem:** New package directories created but `nix build` couldn't find them.
 **Solution:** Must `git add` untracked directories/files for nix flake to include them in the evaluation tree.
 
+### 14. dde-daemon `deepin-system-power-control` Service Failure
+**Problem:** dde-daemon creates a transient systemd service for `/usr/sbin/deepin-system-power-control` which is a UOS-specific binary not available in upstream packages.
+**Solution:** Patched the Go source in `system/power1/manager_powersave.go` to replace the path with `/run/current-system/sw/bin/true`.
+
+### 15. VM Black Screen — No Hardware GL Acceleration
+**Problem:** QEMU with `-vga virtio` only provides a dumb framebuffer with DRISWRAST (software rasterization). deepin-kwin requires real GL for compositing.
+**Solution:** Changed VM to `-device virtio-vga-gl` with `-display gtk,gl=on` for virgl 3D acceleration.
+
+### 16. VM Black Screen — Compositing OFF Despite GL Working
+**Problem:** deepin-kwin requires DConfig schemas for `org.kde.kwin.compositing` which don't exist in any upstream package. Without them, kwin defaults to compositing OFF. Analyzed `composite.cpp` line 1263-1268: reads `[Compositing] Enabled` from kwinrc, then falls back to DConfig `getDConfigUserEffectType()` which returns `AutoSelect` (OFF) when DConfig is unavailable.
+**Solution:** Added `environment.etc."xdg/kwinrc"` to the NixOS module with `[Compositing] Enabled=true Backend=OpenGL`, bypassing DConfig entirely.
+
+### 17. Qt5Compat.GraphicalEffects QML Import Missing
+**Problem:** dde-shell and other QML components need `Qt5Compat.GraphicalEffects` module for blur/shadow effects.
+**Solution:** Added `qt6Packages.qt5compat` to `QML2_IMPORT_PATH` in session variables.
+
+### 18. WebP Image Format Support
+**Problem:** Some deepin icons/images use WebP format, causing missing image warnings.
+**Solution:** Ensured webp support libraries are available in the Qt image format plugins path.
+
 ---
 
 ## Architecture Decisions
@@ -186,71 +256,95 @@ Located at `modules/deepin.nix`. Provides `services.desktopManager.deepin.enable
 
 When enabled:
 - Registers a `deepin` X11 session using `dde-session` as the session command
-- Registers D-Bus services for: dde-shell, dde-session, dde-application-manager, deepin-service-manager, dde-polkit-agent, dde-appearance
-- Sets `QT_PLUGIN_PATH` for platform plugins and integration
-- Links XDG data dirs for icons, wallpapers, sounds, schemas
-- Sets `GSETTINGS_SCHEMA_DIR` for deepin-desktop-schemas
-- Enables polkit, upower, accounts-daemon
+- Registers D-Bus services for: dconf, dde-shell, dde-session, dde-session-ui, dde-session-shell, dde-application-manager, deepin-service-manager, dde-app-services, dde-polkit-agent, dde-appearance, dde-daemon, dde-api, dde-control-center
+- Creates `deepin-daemon` system user/group for dde-dconfig-daemon
+- Runs 3 system-level systemd services: dde-dconfig-daemon, deepin-service-manager, dde-system-daemon
+- Provides systemd user packages for: kglobalacceld, dconf, dde-session, dde-shell, dde-session-ui, dde-appearance
+- Sets `QT_PLUGIN_PATH` and `QT_QPA_PLATFORM_PLUGIN_PATH` for platform plugins
+- Sets `QML2_IMPORT_PATH` for DTK6, dde-shell, dde-launchpad, Qt5Compat
+- Sets `XCURSOR_THEME=bloom` and `XCURSOR_SIZE=24` for deepin cursor theme
+- Sets `DDE_KWIN_DIR` for deepin-kwin discovery
+- Provides default `kwinrc` enabling compositing (workaround for missing DConfig schemas)
+- Combines GSettings schemas from deepin-desktop-schemas, startdde, and dde-daemon
+- Links XDG data dirs for icons, wallpapers, sounds, schemas, dde-shell plugins, D-Bus services, polkit, applications, xsessions, deepin-daemon libs, deepin-api libs
+- Enables PAM for dde-lock (lock screen authentication)
+- Enables polkit, upower, accounts-daemon, udisks2, power-profiles-daemon, NetworkManager
 - Installs Noto fonts as default
 - Enables XDG portal with GTK backend
+- Installs all 36 DDE packages as system packages
 
 ---
 
 ## VM Configuration
 
 Located at `vm/configuration.nix`. QEMU VM with:
-- 4GB RAM, 4 cores, VirtIO GPU
-- Auto-login as `test` user (password: `test`)
+- 4GB RAM, 4 cores, 8GB disk, 1920x1080 resolution
+- VirtIO-VGA-GL with virgl 3D acceleration (`-device virtio-vga-gl -display gtk,gl=on`)
+- Auto-login as `test` user (password: `test`) via LightDM
 - DDE enabled with `deepin` as default session
+- SSH access on port 2222 for debugging (`ssh -p 2222 test@localhost`)
+- Serial console enabled for boot debugging
+- Includes xterm, nano, feh, mesa-demos for testing
 
 Run with: `nix run .#vm`
+
+## Real Hardware Integration
+
+DDE has been added to the user's NixOS system configuration at `~/code/nixos/`:
+
+- `flake.nix`: Added `dde` flake input pointing to local path `/home/monotoko/code/dde-nixos-revival`
+- `configuration.nix`: Added `services.desktopManager.deepin.enable = true`
+- DDE appears alongside GNOME in the GDM session selector
+- Apply with: `nh os switch ~/code/nixos/`
 
 ---
 
 ## Remaining Work
 
-### Critical for Functional Desktop
+### Desktop Background / Wallpaper
 
-| Component | Status | Blocker |
-|-----------|--------|---------|
-| **startdde** | Not started | Go module vendoring for nix sandbox |
-| **dde-daemon** | Not started | Go module vendoring, large dependency tree |
-| **dde-api** | Not started | Go module vendoring |
-| **Window manager** | Not started | Need deepin-kwin or can use regular kwin-x11 |
+The desktop is black because the `org.deepin.ds.desktop` wallpaper plugin ships with `dde-file-manager`, which has heavy dependencies (libdfm6-*, libdeepin-pdfium) and security concerns from the openSUSE audit. Options:
+1. Package dde-file-manager (heavy lift, security concerns)
+2. Create a minimal wallpaper-only plugin/workaround
+3. Use `feh --bg-scale` as a user-level workaround
 
-### Important for Usability
+### LightDM Deepin Greeter
 
-| Component | Status | Blocker |
-|-----------|--------|---------|
-| **dde-session-shell** | Researched | `liblightdm-qt6-3` not in nixpkgs (lightdm Qt6 greeter library) |
-| **dde-control-center** | Not started | Large package, many dependencies |
-| **dde-file-manager** | Not started | Security concerns (openSUSE audit) |
-| **deepin-desktop-theme** | Not started | Should be simple |
-| **dde-account-faces** | Not started | Should be simple |
+`lightdm-deepin-greeter` requires `liblightdm-qt6-3` which doesn't exist — Canonical's LightDM only supports Qt5. dde-lock (lock screen) works fine without it. This is not a priority since GDM works as the display manager.
 
-### dde-session-shell Research Summary
-- No release tags — must pin to commit `a711d9f7c9d8fe822bf044bfe4ee5fe86a2c1cc6`
-- Hash: `sha256-9Eas0WTK2OV3tCZs+rBmH1gbKbMrrSB1fuj5WgDO6P8=`
-- CMake with C++17, Qt6/Dtk6 "snipe" code path
-- **BLOCKER:** Needs `liblightdm-qt6-3` — LightDM's Qt6 greeter library. nixpkgs lightdm doesn't build this.
-- Extensive hardcoded path patching needed (20+ `/usr` references, `#include </usr/include/shadow.h>`)
-- Hardcoded `qdbusxml2cpp` path in CMakeLists.txt
-- Builds dde-lock (lock screen) + lightdm-deepin-greeter (LightDM greeter)
-- PAM module `pam_inhibit_autologin.so` built as subproject
+### Not Yet Packaged
 
-### Go Services Strategy
-The Go packages (dde-api, dde-daemon, startdde) are the biggest remaining challenge:
-- Need `buildGoModule` with `vendorHash` computed for each
-- dde-daemon is the largest (~95% Go, many deps)
-- startdde is the session entry point that launches everything
-- Without startdde, we rely on dde-session launching dde-shell directly
-- Alternative: skip Go services initially, launch dde-shell directly from the X session
+| Component | Priority | Notes |
+|-----------|----------|-------|
+| **dde-file-manager** | Medium | Provides desktop wallpaper plugin + file manager. Heavy deps, security concerns. |
+| **dde-network-core** | Low | Network management integration. NetworkManager works without it. |
+| **dde-clipboard** | Low | Clipboard manager |
+| **dde-grand-search** | Low | Desktop search |
+| **deepin-terminal** | Blocked | Still Qt5/DTK5, cannot build in Qt6-only stack |
+| **deepin-editor** | Blocked | Still Qt5/DTK5, cannot build in Qt6-only stack |
+
+### Polish / Quality
+
+| Task | Notes |
+|------|-------|
+| **Test on real hardware** | DDE added to NixOS config, needs `nh os switch` and GDM testing |
+| **Binary cache / CI** | No CI yet. Builds are heavy (67 derivations). Consider Garnix or GitHub Actions. |
+| **Upstream contribution** | Could submit to nixpkgs once stable and well-tested |
+| **Security audit** | Review openSUSE findings against DDE 25 codebase |
 
 ---
 
 ## Commit History
 
 ```
+de06f78 Enable kwin compositing by default, improve VM 3D support
+d518d31 Fix power control service failure, add cursor theme and xterm
+df9c008 Add dde-session-shell (dde-lock), fix Qt5Compat and webp support
+2370fc8 Get DDE 25 desktop session fully running in VM
+b978c79 Fix build issues and get VM building successfully
+a49e7ad Add dde-control-center, dde-session-ui, artwork, and deepin-pw-check (5 new packages)
+f110ccd Add Go services, deepin-kwin, and supporting packages (6 new packages)
+71267b5 Add comprehensive PROGRESS.md documenting all work done
 6f65faf Implement NixOS module and VM configuration for DDE 25
 aa6f568 Add dde-appearance and gsettings-qt6 (2 new packages)
 e3795f8 Add artwork, dde-launchpad, and re-enable dde-polkit-agent (5 new packages)
