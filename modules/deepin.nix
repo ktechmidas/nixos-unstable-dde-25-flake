@@ -48,6 +48,7 @@ in
       deepin.dde-shell
       deepin.dde-session
       deepin.dde-session-ui
+      deepin.dde-session-shell             # org.deepin.dde.LockFront1, ShutdownFront1
       deepin.dde-application-manager
       deepin.deepin-service-manager
       deepin.dde-app-services
@@ -157,6 +158,7 @@ in
         "${deepin.dtk6declarative}/lib/qt6/qml"
         "${deepin.dde-shell}/lib/qt6/qml"
         "${deepin.dde-launchpad}/lib/qt6/qml"
+        "${pkgs.qt6Packages.qt5compat}/${pkgs.qt6Packages.qtbase.qtQmlPrefix}"
       ];
       # DDE needs to find its own schemas
       DDE_KWIN_DIR = "${deepin.deepin-kwin}";
@@ -217,6 +219,7 @@ in
       dde-application-manager
       dde-session
       dde-session-ui
+      dde-session-shell                    # dde-lock (lock screen)
       dde-polkit-agent
       dde-appearance
       dde-control-center
@@ -239,6 +242,9 @@ in
     environment.variables = {
       GSETTINGS_SCHEMA_DIR = lib.mkDefault "${deepinSchemas}/share/glib-2.0/schemas";
     };
+
+    # PAM for dde-lock (lock screen authentication)
+    security.pam.services.dde-lock = {};
 
     # Polkit (for dde-polkit-agent)
     security.polkit.enable = true;

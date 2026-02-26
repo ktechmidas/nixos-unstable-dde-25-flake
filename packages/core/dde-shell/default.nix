@@ -50,6 +50,8 @@ stdenv.mkDerivation (finalAttrs: {
     qt6Packages.qtdeclarative
     qt6Packages.qtsvg
     qt6Packages.qtwayland
+    qt6Packages.qt5compat          # Qt5Compat.GraphicalEffects QML (notification panel)
+    qt6Packages.qtimageformats     # webp, tiff, etc. image format plugins
     wayland
     wayland-protocols
     yaml-cpp

@@ -26,6 +26,7 @@ No Qt5 needed. Use `qt6Packages.newScope` exclusively.
 9. [Key Contacts & Community](#9-key-contacts--community)
 10. [Strategy for Revival](#10-strategy-for-revival)
 11. [Open Questions](#11-open-questions)
+12. [Go Service Packaging Research (LAYER 8)](#12-go-service-packaging-research-layer-8)
 
 ---
 
@@ -508,3 +509,949 @@ LAYER 12 - Session:
 ### Community
 - Telegram porting group: https://t.me/ddeport
 - NixOS Discourse thread: https://discourse.nixos.org/t/progress-on-porting-the-deepin-desktop-environment-dde-to-nixos/20733
+
+---
+
+## 12. Go Service Packaging Research (LAYER 8)
+
+**Date:** 2026-02-26
+**Packages:** startdde, dde-daemon, dde-api
+**Build system:** All three use `buildGoModule` with Makefile wrappers
+**Go version:** All require Go 1.20+
+**Dependencies vendor in-source:** NO (none have a `vendor/` directory)
+**All have go.sum:** YES (needed for `buildGoModule` vendorHash computation)
+
+### Dependency Chain
+```
+dde-api (standalone, no DDE Go deps)
+   ^
+   |
+dde-daemon (depends on dde-api as Go module)
+   ^
+   |
+startdde (depends on dde-api as Go module)
+```
+
+Note: startdde and dde-daemon both import `dde-api` as a Go module dependency.
+dde-api does NOT depend on either of the others. This is the build order.
+
+### Old nixpkgs Packaging Reference
+
+All three had working `buildGoModule` expressions in nixpkgs before the August 2025 removal
+(commit `96e751adaf2f`, parent of the `deepin: drop` commit `25303238b95d`).
+Located at `pkgs/desktops/deepin/go-package/{startdde,dde-daemon,dde-api}/default.nix`.
+
+Key patterns from the old packaging:
+- Used `buildGoModule` with `vendorHash` (not vendored in-source)
+- Custom `buildPhase` calling `make` with `GO_BUILD_FLAGS="$GOFLAGS"` or `GOBUILD_OPTIONS="$GOFLAGS"`
+- Custom `installPhase` calling `make install DESTDIR="$out" PREFIX="/"`
+- Extensive `substituteInPlace` for hardcoded paths
+- `wrapGAppsHook3` for GTK/GLib integration
+- `postFixup` wrapping binaries with runtime PATH dependencies
+
+---
+
+### 12.1 startdde (Session Starter)
+
+**Repo:** https://github.com/linuxdeepin/startdde
+**Latest release:** 6.1.6 (2025-03-27)
+**Source hash:** `sha256-znpp5lyGNUTHfyHcIu05pCWgzdNB0sKr+jNPZm+86O4=`
+**Scale:** 68 Go files, ~21,700 lines of Go, 0 C files
+
+#### Can it be built with buildGoModule?
+YES. It has `go.mod` and `go.sum` (73 lines). No vendor directory -- needs `vendorHash`.
+The old nixpkgs used `buildGoModule` successfully.
+
+#### Build System
+Makefile wrapping `go build`. Key targets:
+- `startdde` binary (main session starter)
+- `fix-xauthority-perm` binary (setuid helper)
+- `translate` (msgfmt for locale .po files)
+- `install` target puts files under `$DESTDIR$PREFIX`
+
+Build command: `make GO_BUILD_FLAGS="$GOFLAGS"`
+Install command: `make install DESTDIR="$out" PREFIX="/"`
+
+#### CGo / Native Dependencies
+```
+#cgo pkg-config: x11
+```
+- **pkg-config deps:** `x11` (libX11)
+- **nativeBuildInputs needed:** `pkg-config`, `gettext` (for msgfmt), `jq`, `wrapGAppsHook3`, `glib`
+- **buildInputs needed:** `libX11`, `libgnome-keyring`, `gtk3`, `alsa-lib`, `pulseaudio`, `libgudev`, `libsecret`
+
+#### Go Module Dependencies (from go.mod)
+```
+github.com/godbus/dbus/v5              v5.1.0
+github.com/linuxdeepin/dde-api         v0.0.0-20241128100002
+github.com/linuxdeepin/go-dbus-factory  v0.0.0-20241205055755
+github.com/linuxdeepin/go-gir          v0.0.0-20230413065249
+github.com/linuxdeepin/go-lib          v0.0.0-20230406092403
+github.com/linuxdeepin/go-x11-client   v0.0.0-20230131052004
+github.com/stretchr/testify            v1.8.2
+golang.org/x/xerrors
+```
+
+#### Hardcoded Paths (4 files affected)
+| File | Path | Purpose |
+|------|------|---------|
+| `display/manager.go` | `/usr/lib/deepin-daemon/dde-touchscreen-dialog` | Touchscreen dialog binary |
+| `display/color_temp.go` | `/usr/share/zoneinfo/zone1970.tab` | Timezone data |
+| `main.go` | reference to `/usr/sbin/lightdm-session` | Comment only |
+| `xsettings/xsettings.go` | `/etc/lightdm/deepin/qt-theme.ini` | LightDM config |
+
+**Patching difficulty: LOW** -- only ~4 paths to fix.
+
+#### Install Artifacts
+- `$PREFIX/bin/startdde`
+- `$PREFIX/sbin/deepin-fix-xauthority-perm`
+- `$PREFIX/lib/deepin-daemon/greeter-display-daemon` (symlink to startdde)
+- `$PREFIX/share/lightdm/lightdm.conf.d/60-deepin.conf`
+- `$PREFIX/share/startdde/filter.conf`
+- `$PREFIX/share/glib-2.0/schemas/*.xml`
+- `$PREFIX/share/dsg/configs/org.deepin.startdde/*.json`
+- `$PREFIX/lib/systemd/user/dde-display-task-refresh-brightness.service`
+- `$PREFIX/share/locale/*/LC_MESSAGES/startdde.mo`
+
+---
+
+### 12.2 dde-daemon (System/Session Daemon)
+
+**Repo:** https://github.com/linuxdeepin/dde-daemon
+**Latest release:** 6.1.75 (2026-02-06) -- actively developed
+**Source hash:** `sha256-Mw1DUbqiYfx2+VHKYRZqsVScqAo5wuzd7BkxC7Qvy+o=`
+**Scale:** 521 Go files, ~98,400 lines of Go, 29 C/H files, 15 binaries produced
+
+THIS IS THE BIGGEST AND HARDEST PACKAGE.
+
+#### Can it be built with buildGoModule?
+YES. Has `go.mod` and `go.sum` (138 lines). No vendor directory -- needs `vendorHash`.
+
+#### Build System
+Makefile wrapping `go build`. Produces 15 binaries:
+```
+dde-session-daemon    dde-system-daemon    grub2
+search                backlight_helper     langselector
+soundeffect           dde-lockservice      default-terminal
+dde-greeter-setter    default-file-manager greeter-display-daemon
+fix-xauthority-perm   user-config          desktop-toggle (pure C)
+```
+
+Note: `desktop-toggle` is a **pure C binary** (`bin/desktop-toggle/main.c`) built with
+`gcc $^ $(pkg-config --cflags --libs x11)`. This needs special handling in buildGoModule.
+
+Build also requires:
+- `python3` (for `misc/icons/install_to_hicolor.py`)
+- `deepin-policy-ts-convert` (for polkit policy translation)
+- `msgfmt` (gettext, for locale files)
+
+Build command: `make GOBUILD_OPTIONS="$GOFLAGS"`
+Install command: `make install DESTDIR="$out" PREFIX="/"`
+
+#### CGo / Native Dependencies (EXTENSIVE)
+```
+pkg-config: x11, ddcutil, xi, libudev, libinput, glib-2.0, alsa
+LDFLAGS: -lcrypt, -ldl, -lpthread, -ludev, -lm
+```
+
+**nativeBuildInputs needed:**
+- `pkg-config`, `deepin-gettext-tools`, `gettext`, `python3`, `wrapGAppsHook3`
+
+**buildInputs needed:**
+- `ddcutil` (DDC/CI monitor control)
+- `linux-pam`, `libxcrypt` (account/password management)
+- `alsa-lib` (ALSA audio)
+- `glib` (GLib/GIO)
+- `libgudev` (udev GObject)
+- `gtk3`, `gdk-pixbuf-xlib` (UI components)
+- `networkmanager` (network management)
+- `libinput` (input device management)
+- `libnl` (netlink)
+- `librsvg` (SVG rendering)
+- `pulseaudio` (PulseAudio audio)
+- `tzdata` (timezone data)
+- `xkeyboard_config` (keyboard layouts)
+- `libX11`, `libXi` (X11)
+
+**Runtime PATH needed:**
+- `util-linux`, `dde-session-ui`, `glib`, `lshw`, `dmidecode`, `systemd`
+
+#### Go Module Dependencies (from go.mod)
+```
+github.com/adrg/xdg                    v0.5.3
+github.com/fsnotify/fsnotify           v1.8.0
+github.com/godbus/dbus/v5              v5.1.0
+github.com/jouyouyun/hardware          v0.1.8
+github.com/linuxdeepin/dde-api         v0.0.0-20260131071225
+github.com/linuxdeepin/go-dbus-factory  v0.0.0-20260131085755
+github.com/linuxdeepin/go-gir          v0.0.0-20251204113853
+github.com/linuxdeepin/go-lib          v0.0.0-20251106065207
+github.com/linuxdeepin/go-x11-client   v0.0.0-20240415051504
+github.com/mdlayher/netlink            v1.7.2
+github.com/rickb777/date               v1.21.1
+github.com/stretchr/testify            v1.9.0
+golang.org/x/xerrors
+google.golang.org/protobuf             v1.34.2
+```
+
+#### Hardcoded Paths (MASSIVE -- ~80+ occurrences across 60+ files)
+
+Major categories:
+1. **Binary paths:** `/usr/lib/deepin-daemon/*`, `/usr/lib/deepin-api/*`, `/usr/bin/dde-control-center`, `/usr/bin/setxkbmap`, `/usr/bin/deepin-system-monitor`, etc.
+2. **Data paths:** `/usr/share/X11/xkb`, `/usr/share/zoneinfo`, `/usr/share/wallpapers`, `/usr/share/dde-daemon`, `/usr/share/dde`, `/usr/share/backgrounds`
+3. **Config paths:** `/etc/default/locale`, `/etc/default/grub.d`, `/etc/deepin`, `/etc/pam.d`, `/etc/NetworkManager`, `/etc/shells`, `/etc/passwd`, `/etc/shadow`, `/etc/group`, `/etc/sudoers`, `/etc/lightdm`, `/etc/gdm`, `/etc/sddm.conf`, etc.
+4. **PATH overrides:** `os.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:...")` in grub2/modify_manger.go and bin/dde-system-daemon/main.go
+5. **libexec paths:** `/usr/libexec/dde-daemon/keybinding/*`
+6. **Lib paths:** `/usr/lib/deepin-daemon/*` (dozens of references)
+
+**Patching difficulty: HIGH** -- This is the #1 hardest package. The old nixpkgs used:
+- 3 dedicated `.diff` patch files
+- A global `sed` replacing `/usr/lib/deepin-daemon` with `/run/current-system/sw/lib/deepin-daemon`
+- Many individual `substituteInPlace` calls
+- `patchShebangs` for shell scripts
+- `strings.Contains` instead of exact path matching for binary detection
+
+**Old patches (from nixpkgs `96e751adaf2f`):**
+1. `0001-dont-set-PATH.diff` -- Removes the hardcoded PATH override in grub2/modify_manger.go
+2. `0002-fix-custom-wallpapers-path.diff` -- Moves wallpapers to `/var/lib/dde-daemon/` and fixes head command path
+3. `0003-aviod-use-hardcode-path.diff` -- Replaces exact binary path matching with `strings.Contains` for dde-control-center, dde-lock, lightdm-deepin-greeter, fprintd; fixes dbus-send in udev rules; fixes shutdown command
+
+These patches will need updating for the new version (6.1.75 vs 6.0.43) but the patterns are the same.
+
+#### Install Artifacts (extensive)
+- 15 binaries in `$PREFIX/lib/deepin-daemon/`
+- D-Bus configs in `$PREFIX/share/dbus-1/system.d/`
+- D-Bus session/system services
+- Polkit actions + rules
+- systemd user + system services
+- PAM configs in `/etc/pam.d/`
+- GRUB configs in `/etc/default/grub.d/`
+- Deepin configs in `/etc/deepin/`
+- PulseAudio configs in `/etc/pulse/daemon.conf.d/`
+- GSettings schemas
+- Locale files
+- Icons
+- Service trigger JSON configs
+- Shell scripts in `$PREFIX/lib/deepin-daemon/` and `$PREFIX/libexec/dde-daemon/`
+- DConfig settings JSONs
+
+---
+
+### 12.3 dde-api (D-Bus API)
+
+**Repo:** https://github.com/linuxdeepin/dde-api
+**Latest release:** 6.0.35 (2026-02-05) -- actively developed
+**Source hash:** `sha256-jCy4AJCKUVL4ZCvqr25Rxse+NZkPkEQR+I2Oyv/IGuo=`
+**Scale:** 86 Go files, ~14,700 lines of Go, 12 C/H files
+
+#### Can it be built with buildGoModule?
+YES. Has `go.mod` and `go.sum` (115 lines). No vendor directory -- needs `vendorHash`.
+
+#### Build System
+Makefile wrapping `go build`. Produces 10 binaries:
+```
+device             graphic            locale-helper
+hans2pinyin        sound-theme-player deepin-shutdown-sound
+dde-open           adjust-grub-theme  image-blur
+image-blur-helper
+```
+
+Also builds Go libraries (installed to `$GOSITE_DIR`):
+```
+dxinput  drandr  soundutils  lang_info  i18n_dependent
+session  language_support  userenv  inhibit_hint
+powersupply  polkit
+```
+
+Build command: `make GOBUILD_OPTIONS="$GOFLAGS"`
+Install command: `make install DESTDIR="$out" PREFIX="/"`
+
+Note: `ts-to-policy` target requires `deepin-policy-ts-convert` (from `deepin-gettext-tools`).
+
+#### CGo / Native Dependencies
+```
+pkg-config: x11, xi
+```
+
+**nativeBuildInputs needed:**
+- `pkg-config`, `deepin-gettext-tools`, `wrapGAppsHook3`
+
+**buildInputs needed:**
+- `alsa-lib` (ALSA audio)
+- `gtk3` (UI)
+- `libcanberra` (event sounds)
+- `libgudev` (udev GObject)
+- `librsvg` (SVG)
+- `poppler` (PDF rendering)
+- `pulseaudio` (audio)
+- `gdk-pixbuf-xlib` (image handling)
+- `libX11`, `libXi` (X11)
+
+#### Go Module Dependencies (from go.mod)
+```
+github.com/disintegration/imaging      v1.6.2
+github.com/fogleman/gg                 v1.3.0
+github.com/godbus/dbus/v5              v5.1.0
+github.com/gosexy/gettext              v0.0.0-20160830220431
+github.com/linuxdeepin/go-dbus-factory  v0.0.0-20251106065250
+github.com/linuxdeepin/go-gir          v0.0.0-20251127080441
+github.com/linuxdeepin/go-lib          v0.0.0-20251106065207
+github.com/linuxdeepin/go-x11-client   v0.0.0-20230131052004
+github.com/nfnt/resize
+github.com/stretchr/testify            v1.8.1
+gopkg.in/alecthomas/kingpin.v2         v2.2.6
+```
+
+Notable: includes image processing (`imaging`, `gg`, `resize`), gettext, kingpin CLI parser.
+
+#### Hardcoded Paths (9 files affected, moderate)
+| File | Path | Purpose |
+|------|------|---------|
+| `locale-helper/main.go` | `/usr/sbin/locale-gen`, `/usr/sbin/deepin-immutable-ctl` | Locale generation |
+| `locale-helper/ifc.go` | `/etc/default/locale`, `/etc/locale.gen` | Locale config |
+| `i18n_dependent/i18n_dependent.go` | `/usr/share/i18n/i18n_dependent.json` | i18n data |
+| `sound-theme-player/utils.go` | `/etc/lightdm/lightdm.conf` | LightDM detection |
+| `sound-theme-player/main.go` | `/usr/sbin/alsactl` | ALSA control |
+| `lang_info/lang_info.go` | `/usr/share/i18n/language_info.json`, `/usr/share/i18n/SUPPORTED` | Language data |
+| `language_support/lang_support.go` | `/usr/bin/dpkg-query`, `/usr/bin/apt-cache` | Debian-specific! |
+| `adjust-grub-theme/main.go` | `/usr/share/dde-api/data/grub-themes/`, `/etc/os-version` | GRUB themes |
+| `adjust-grub-theme/util.go` | `/etc/default/grub`, `/etc/default/locale`, `/etc/locale.conf` | GRUB/locale config |
+
+**Patching difficulty: MODERATE** -- ~15-20 paths to fix. The `language_support` references to
+`dpkg-query` and `apt-cache` are Debian-specific and will need to be stubbed or removed for NixOS.
+
+#### Install Artifacts
+- 10 binaries in `$PREFIX/lib/deepin-api/`
+- `dde-open` also installed to `$PREFIX/bin/`
+- Go libraries installed to `$GOSITE_DIR/src/github.com/linuxdeepin/dde-api/`
+- D-Bus configs, services, system-services
+- Polkit actions + rules
+- systemd system services
+- Data files in `$PREFIX/share/dde-api/data/`
+- Icons in `$PREFIX/share/icons/hicolor/`
+- Shell scripts from `misc/scripts/`
+
+---
+
+### 12.4 Shared Build Dependency: deepin-gettext-tools
+
+Both dde-daemon and dde-api need `deepin-policy-ts-convert` at build time (and startdde
+needs `deepin-update-pot`). This tool was also removed from nixpkgs.
+
+**Old nixpkgs expression** (commit `96e751adaf2f`):
+```nix
+{ stdenv, fetchFromGitHub, gettext, python3Packages, perlPackages }:
+stdenv.mkDerivation rec {
+  pname = "deepin-gettext-tools";
+  version = "1.0.11";
+  src = fetchFromGitHub {
+    owner = "linuxdeepin"; repo = pname; rev = version;
+    sha256 = "sha256-V6X0E80352Vb6zwaBTRfZZnXEVCmBRbO2bca9A9OL6c=";
+  };
+  nativeBuildInputs = [ python3Packages.wrapPython ];
+  buildInputs = [ gettext perlPackages.perl perlPackages.ConfigTiny perlPackages.XMLLibXML ];
+  makeFlags = [ "PREFIX=${placeholder "out"}" ];
+}
+```
+
+This is a simple stdenv package (not Go). Must be packaged first since it is needed by all three
+Go packages at build time.
+
+---
+
+### 12.5 Summary Table
+
+| | startdde | dde-daemon | dde-api |
+|---|---|---|---|
+| **Version** | 6.1.6 | 6.1.75 | 6.0.35 |
+| **Release date** | 2025-03-27 | 2026-02-06 | 2026-02-05 |
+| **Source SRI** | `sha256-znpp5l...86O4=` | `sha256-Mw1DUb...y+o=` | `sha256-jCy4AJ...Guo=` |
+| **Go files** | 68 | 521 | 86 |
+| **Lines of Go** | ~21,700 | ~98,400 | ~14,700 |
+| **C files** | 0 | 29 | 12 |
+| **Has go.sum** | YES (73 lines) | YES (138 lines) | YES (115 lines) |
+| **Has vendor/** | NO | NO | NO |
+| **buildGoModule** | YES | YES | YES |
+| **vendorHash** | needs computing | needs computing | needs computing |
+| **Binaries produced** | 2 | 15 | 10 |
+| **CGo pkg-config** | x11 | x11, xi, ddcutil, libudev, libinput, glib-2.0, alsa | x11, xi |
+| **Hardcoded paths** | ~4 | ~80+ | ~15-20 |
+| **Patching difficulty** | LOW | HIGH | MODERATE |
+| **Has Makefile** | YES | YES | YES |
+| **Other build systems** | None | None | None |
+| **Python needed** | No | Yes (icons) | No |
+| **deepin-gettext-tools** | Yes (pot) | Yes (policy) | Yes (policy) |
+
+### 12.6 vendorHash Strategy
+
+None of the three packages vendor their Go dependencies. For NixOS `buildGoModule`:
+- The `vendorHash` must be computed by attempting a build with `vendorHash = lib.fakeHash;`
+- Nix will download the Go modules, fail, and report the correct hash
+- This hash goes into the `vendorHash` attribute
+- The fetched modules are cached in a fixed-output derivation
+
+The old nixpkgs had working vendorHashes for version 6.0.x. Since we are targeting newer versions
+(6.1.x for startdde/dde-daemon, 6.0.35 for dde-api), these hashes must be recomputed.
+
+### 12.7 Build Order for Go Packages
+
+```
+1. deepin-gettext-tools  (stdenv, simple Make-based, needed by all three)
+2. dde-api               (buildGoModule, no DDE Go deps, needed by the other two)
+3. dde-daemon            (buildGoModule, depends on dde-api)
+4. startdde              (buildGoModule, depends on dde-api)
+```
+
+Note: dde-daemon and startdde could build in parallel after dde-api, since they only
+depend on dde-api as a Go module (fetched via vendorHash, not as a Nix build dep).
+
+### 12.8 dde-daemon Deep Dive: Runtime Services & Architecture
+
+**Date:** 2026-02-26 (extended research session)
+
+#### What dde-daemon Actually Does
+
+dde-daemon is the **central system/session management daemon** for the Deepin desktop.
+It produces two main daemon binaries plus 13 helper binaries, managing virtually every
+desktop subsystem via D-Bus interfaces.
+
+##### dde-session-daemon (user session, runs per-user)
+Manages session-level services activated on-demand via D-Bus:
+- **Audio** (`org.deepin.dde.Audio1`) -- Audio device/volume management via PulseAudio + ALSA
+- **Bluetooth** (`org.deepin.dde.Bluetooth1`) -- Bluetooth pairing, device management
+- **InputDevices** (`org.deepin.dde.InputDevices1`) -- Keyboard layout, touchpad, mouse settings
+- **Keybinding** (`org.deepin.dde.Keybinding1`) -- System keyboard shortcuts
+- **LangSelector** (`org.deepin.dde.LangSelector1`) -- System language switching
+- **Power** (`org.deepin.dde.Power1`) -- Power management, screen dimming, suspend/hibernate
+- **Search** (`org.deepin.dde.Search1`) -- Desktop file search
+- **SessionWatcher** (`org.deepin.dde.SessionWatcher1`) -- Session lifecycle tracking
+- **SoundEffect** (`org.deepin.dde.SoundEffect1`) -- System sound effects
+- **SystemInfo** (`org.deepin.dde.SystemInfo1`) -- System information provider
+- **Timedate** (`org.deepin.dde.Timedate1`) -- Time/date/timezone management
+- **XEventMonitor** (`org.deepin.dde.XEventMonitor1`) -- X11 input event monitoring
+- **Zone** (`org.deepin.dde.Zone1`) -- Hot corners/screen edges
+- **LastoreSessionHelper** (`org.deepin.dde.LastoreSessionHelper1`) -- Software update helper
+- **Clipboard** -- Clipboard management
+- **Display** -- Display/monitor management
+- **Screensaver** -- Screensaver management
+- **Service-trigger** -- On-demand service activation
+- **EventLog** -- Usage event logging (optional)
+
+Modules can be selectively enabled/disabled. Treeland-incompatible modules (x-event-monitor,
+keybinding, screensaver, display, xsettings) are auto-skipped when running under Treeland/Wayland.
+
+##### dde-system-daemon (system-level, runs as root via systemd)
+Manages privileged operations:
+- **Accounts** (`org.deepin.dde.Accounts1`) -- User account management (create/delete/modify)
+- **AirplaneMode** (`org.deepin.dde.AirplaneMode1`) -- RF kill switch management
+- **Bluetooth** (system) (`org.deepin.dde.Bluetooth1`) -- Privileged BT operations
+- **Display** (system) (`org.deepin.dde.Display1`) -- Privileged display config
+- **Gesture** (`org.deepin.dde.Gesture1`) -- Touchpad gesture recognition (uses libinput C code)
+- **Hostname** -- Hostname management
+- **InputDevices** (system) -- Privileged input device config (udev rules for touchpad)
+- **KeyEvent** (`org.deepin.dde.KeyEvent1`) -- System-level key event monitoring (libinput)
+- **Lang** -- System-wide language settings
+- **Power** (system) (`org.deepin.dde.Power1`) -- Privileged power management (suspend, lid)
+- **ResourceCtl** -- Cgroup resource control
+- **Scheduler** -- Process scheduler optimization (Deepin/UOS only, disabled via `noscheduler` tag)
+- **SwapSched** (`org.deepin.dde.SwapSchedHelper1`) -- Swap scheduling helper
+- **SystemInfo** (system) (`org.deepin.dde.SystemInfo1`) -- System hardware info
+- **Timedate** (system) (`org.deepin.dde.Timedate1`) -- Privileged timezone/NTP management
+- **UADP** (`org.deepin.dde.Uadp1`) -- Unified Adaptation and Detection Platform (crypto)
+- **ImageEffect** (`org.deepin.dde.ImageEffect1`) -- Image blur effects
+
+##### Helper binaries
+- `grub2` -- GRUB bootloader configuration management
+- `backlight_helper` -- Display backlight control (DDC/CI via ddcutil)
+- `langselector` -- Language selection daemon
+- `soundeffect` -- Sound effect player daemon
+- `dde-lockservice` -- Screen lock service
+- `default-terminal` -- Default terminal emulator launcher
+- `dde-greeter-setter` -- Greeter/login screen configuration
+- `default-file-manager` -- Default file manager launcher
+- `greeter-display-daemon` -- Display config for login greeter
+- `fix-xauthority-perm` -- X11 auth file permission fixer
+- `search` -- Desktop search daemon
+- `user-config` -- First-login user configuration (desktop setup, wallpapers)
+- `desktop-toggle` -- Pure C binary to toggle show-desktop (X11 _NET_SHOWING_DESKTOP)
+
+#### D-Bus Services (29 total)
+
+Session-activated (14 `.service` files in `misc/services/`):
+```
+org.deepin.dde.Audio1              -> dde-session-daemon
+org.deepin.dde.Bluetooth1          -> dde-session-daemon
+org.deepin.dde.InputDevices1       -> dde-session-daemon
+org.deepin.dde.Keybinding1         -> dde-session-daemon
+org.deepin.dde.LangSelector1      -> langselector
+org.deepin.dde.LastoreSessionHelper1 -> dde-session-daemon
+org.deepin.dde.Power1             -> dde-session-daemon
+org.deepin.dde.Search1            -> search
+org.deepin.dde.SessionWatcher1    -> dde-session-daemon
+org.deepin.dde.SoundEffect1       -> dde-session-daemon
+org.deepin.dde.SystemInfo1        -> dde-session-daemon
+org.deepin.dde.Timedate1          -> dde-session-daemon
+org.deepin.dde.XEventMonitor1     -> dde-session-daemon
+org.deepin.dde.Zone1              -> dde-session-daemon
+```
+
+System-activated (15 `.service` files in `misc/system-services/`):
+```
+org.deepin.dde.Accounts1          -> dde-system-daemon (via systemd)
+org.deepin.dde.AirplaneMode1      -> dde-system-daemon (via systemd)
+org.deepin.dde.BacklightHelper1   -> dde-system-daemon (via systemd)
+org.deepin.dde.Bluetooth1         -> dde-system-daemon (via systemd)
+org.deepin.dde.Daemon1            -> dde-system-daemon (via systemd)
+org.deepin.dde.Display1           -> dde-system-daemon (via systemd)
+org.deepin.dde.Gesture1           -> dde-system-daemon (via systemd)
+org.deepin.dde.Greeter1           -> dde-system-daemon (via systemd)
+org.deepin.dde.Grub2              -> dde-system-daemon (via systemd)
+org.deepin.dde.ImageEffect1       -> dde-system-daemon (via systemd)
+org.deepin.dde.LockService1       -> dde-system-daemon (via systemd)
+org.deepin.dde.Power1             -> dde-system-daemon (via systemd)
+org.deepin.dde.SwapSchedHelper1   -> dde-system-daemon (via systemd)
+org.deepin.dde.Timedate1          -> dde-system-daemon (via systemd)
+org.deepin.dde.Uadp1              -> dde-system-daemon (via systemd)
+```
+
+#### systemd Services (7 total)
+
+System services (5):
+```
+dde-system-daemon.service         -> /usr/lib/deepin-daemon/dde-system-daemon (root, graphical.target)
+dde-backlight-helper.service      -> backlight helper
+dde-greeter-setter.service        -> greeter display config
+dde-lock-service.service          -> lock screen service
+deepin-grub2.service              -> GRUB management
+```
+
+User services (2):
+```
+org.dde.session.Daemon1.service   -> /usr/lib/deepin-daemon/dde-session-daemon (D-Bus activated)
+org.deepin.dde.SoundEffect1.service -> sound effect player
+```
+
+#### CGo Breakdown by Module (8 files with pkg-config)
+
+| File | pkg-config deps | C libraries | Purpose |
+|------|----------------|-------------|---------|
+| `bin/dde-session-daemon/main.go` | x11 | libX11 (XInitThreads) | X11 thread safety init |
+| `inputdevices1/wrapper.go` | x11, xi | libX11, libXi + pthread | X11 input event listening |
+| `audio1/alsa.go` | alsa | libasound | ALSA mixer control |
+| `bin/backlight_helper/ddcci/ddcci.go` | ddcutil | libddcutil + dl | DDC/CI monitor brightness |
+| `system/inputdevices1/libinput.go` | libinput, libudev | libinput, libudev | Input device config |
+| `system/inputdevices1/udev_monitor.go` | libudev | libudev | Device hotplug monitoring |
+| `system/keyevent1/libinput_bridge.go` | libinput, glib-2.0 | libinput, glib, udev, m | Key event monitoring |
+| `system/gesture1/gesture.go` | libinput, glib-2.0 | libinput, glib, udev, m | Gesture recognition |
+
+Additional implicit CGo (no pkg-config, just LDFLAGS):
+- `accounts1/user_ifc.go` -- `-lcrypt` (password hashing via crypt.h)
+- `accounts1/users/passwd.go` -- `-lcrypt` (shadow password)
+- `accounts1/reminder_info.go` -- libc (utmpx, shadow, arpa/inet)
+- `system/uadp1/crypto.go` -- `-ldl` (dynamic loading for crypto)
+- `session/eventlog/module.go` -- `-ldl` (event SDK dynamic loading)
+- `system/scheduler/proc_connector.go` -- libc (linux connector/cn_proc)
+- `system/power1/lid_switch_common.go` -- libc (linux/input.h)
+- `lastore1/tools.go` -- libc (sys/statvfs.h)
+- `timedate1/zoneinfo/wrapper.go` -- libc (custom C timezone code)
+
+#### Arch Linux In-Repo PKGBUILD Analysis
+
+The repo includes its own Arch PKGBUILD at `archlinux/PKGBUILD` (for a `-git` build).
+
+Key dependencies listed:
+```
+depends=(
+  deepin-desktop-schemas-git ddcutil deepin-api-git gvfs iso-codes lsb-release
+  mobile-broadband-provider-info deepin-polkit-agent-git
+  deepin-polkit-agent-ext-gnomekeyring-git udisks2 upower
+  libxkbfile accountsservice deepin-desktop-base-git bamf pulseaudio
+  org.freedesktop.secrets noto-fonts imwheel ddcutil
+)
+makedepends=(
+  golang-github-linuxdeepin-go-dbus-factory-git golang-deepin-gir-git golang-deepin-lib-git
+  deepin-api-git golang-github-nfnt-resize sqlite deepin-gettext-tools-git
+  git mercurial python-gobject networkmanager bluez go ddcutil
+)
+```
+
+Two patches applied:
+1. **`dde-daemon.patch`** -- Disables TAP gesture events in libinput C code (commented out
+   `LIBINPUT_EVENT_GESTURE_TAP_*` cases which are likely from a newer libinput API not in Arch)
+2. **`remove-tc.patch`** -- Removes UADP (Unified Adaptation/Detection Platform) module entirely
+   by removing `_ "github.com/linuxdeepin/dde-daemon/system/uadp"` import and the `uadpagent`
+   session module. UADP is a Deepin-OS-specific trusted computing module.
+
+**Package phase:** Moves systemd units from `/lib/systemd` to `/usr/lib/systemd` (Arch convention).
+
+**Sysusers config:** Creates a `deepin-daemon` system user (member of `netdev` group).
+
+#### Polkit Policies (15 policy files)
+
+Covers privileged operations for: accounts, airplane mode, backlight, bluetooth, display,
+gesture, greeter, GRUB, image effects, lock service, power, swap scheduler, timedate, UADP,
+and a general system daemon policy.
+
+Two polkit rules files: `org.deepin.dde.grub2.rules` and `org.deepin.dde.accounts.rules`.
+
+#### Config Files Installed to /etc
+
+```
+/etc/pam.d/deepin-auth-keyboard     -- PAM config for keyboard auth
+/etc/deepin/grub2_edit_auth.conf     -- GRUB edit auth config
+/etc/default/grub.d/10_deepin.cfg    -- GRUB default settings
+/etc/pulse/daemon.conf.d/10-deepin.conf -- PulseAudio config
+/etc/systemd/logind.conf             -- logind overrides
+```
+
+#### GSettings Schemas (1 file)
+- `com.deepin.dde.display.gschema.xml`
+
+#### Shell Scripts Shipped
+- `misc/scripts/dde-lock.sh` -- Lock screen via D-Bus + xdotool + setxkbmap
+- `misc/scripts/dde-shutdown.sh` -- Shutdown dialog via D-Bus + xdotool + setxkbmap
+- `misc/libexec/dde-daemon/keybinding/shortcut-dde-grand-search.sh` -- Grand search shortcut
+- `misc/libexec/dde-daemon/keybinding/shortcut-dde-script.sh` -- Script shortcut
+- `misc/libexec/dde-daemon/keybinding/shortcut-dde-switch-monitors.sh` -- Monitor switch
+
+#### Runtime External Commands Executed
+
+The daemon calls many external tools at runtime:
+- **Display:** `redshift`, `xrandr`, `lspci`, `glxinfo`, `dde_wldpms`
+- **Accounts:** `groupadd`, `groupdel`, `groupmod`, `usermod`, `chown`, `runuser`, `setfacl`, `realm`, `xauth`
+- **Input:** `xdotool`, `setxkbmap`, `syndaemon`, `pgrep`, `killall`, `imwheel`, `pkill`
+- **System:** `systemctl`, `systemd-notify`, `systemd-detect-virt`, `rfkill`, `amixer`, `getconf`
+- **GRUB:** `adjust-grub-theme` (from dde-api)
+- **Images:** `image-blur-helper` (from dde-api)
+- **Shell:** `/bin/sh`, `/bin/bash`, `dbus-send`, `xprop`
+- **Backlight:** `dpkg-architecture` (Debian-specific, can be skipped/patched)
+- **Power:** `dde-lowpower` (from separate package)
+- **Touchscreen:** `dde-touchscreen-dialog`
+- **Bluetooth:** `dde-bluetooth-dialog`
+- **Lock/Shutdown:** `dde-lock.sh`, `dde-shutdown.sh`
+- **Keybinding scripts:** Various scripts in libexec
+
+#### NixOS Packaging Complexity Assessment
+
+**Scale: LARGE** -- This is equivalent to a medium-sized system service like accountsservice
+or network-manager in terms of packaging complexity.
+
+**Difficulty: HIGH** -- Due to:
+1. Extensive CGo with 8 different pkg-config dependencies
+2. ~80+ hardcoded FHS paths across 60+ files
+3. 15 separate binaries including a pure C binary
+4. 29 D-Bus service definitions to register
+5. 7 systemd service files needing path fixups
+6. PAM, polkit, GSettings, DConfig integration
+7. Heavy runtime dependency on external tools
+8. Two Makefile targets requiring `deepin-gettext-tools`
+
+**Feasibility: PROVEN** -- The old nixpkgs had a working package for version 6.0.43 using
+`buildGoModule`. The existing NixOS derivation (from nixpkgs 24.11) at
+`pkgs/desktops/deepin/go-package/dde-daemon/default.nix` provides a complete working template.
+
+The main work for version 6.1.75 will be:
+1. Updating the 3 patch files for the new codebase
+2. Recomputing `vendorHash`
+3. Adding any new `substituteInPlace` calls for newly added hardcoded paths
+4. Testing the `noscheduler` build tag (skips Deepin/UOS-specific scheduler)
+5. Potentially applying the Arch `remove-tc.patch` to remove UADP module
+
+---
+
+### 12.9 Key Packaging Challenges
+
+1. **vendorHash computation** - Must do `nix-build` with fake hash to get real hash for each
+2. **deepin-gettext-tools** - Must be packaged first (was removed from nixpkgs)
+3. **Hardcoded path patching in dde-daemon** - ~80+ occurrences, need new versions of the 3 old patches
+4. **desktop-toggle C binary in dde-daemon** - Pure C binary compiled via gcc in Makefile, needs X11 pkg-config. buildGoModule might need `preBuild` to handle this
+5. **Debian-specific code in dde-api** - `dpkg-query` and `apt-cache` references in `language_support/lang_support.go` need to be patched out or replaced
+6. **Runtime binary discovery** - Many paths like `/usr/lib/deepin-daemon/*` need to point to `/run/current-system/sw/lib/deepin-daemon` (NixOS profile path) since components find each other at runtime
+7. **PATH override removal** - Two places set hardcoded PATH; must be patched out (dde-daemon already had a patch for this)
+8. **`/etc` paths** - Many references to `/etc/default/locale`, `/etc/passwd`, etc. Some are Linux standard paths that work on NixOS, others (like `/etc/default/locale`) need patching or symlinking
+9. **UADP module** - Deepin-specific trusted computing platform. Arch removes it entirely. We should too (`remove-tc.patch` from Arch, or equivalent for v6.1.75)
+10. **Scheduler module** - Already disabled by default via `BUILD_TAGS ?= noscheduler` in the Makefile. Only for Deepin/UOS. Keep the default.
+11. **D-Bus service path fixups** - All 29 `.service` files reference `/usr/lib/deepin-daemon/` in their Exec lines. The global sed in the old nixpkgs handled this.
+12. **systemd service path fixups** - 7 systemd units reference `/usr/lib/deepin-daemon/` in ExecStart. The NixOS module used `systemd.packages` which handles this via the `systemd` property of the package.
+13. **System user creation** - Arch creates a `deepin-daemon` system user. The NixOS module should do this via `users.users` and `users.groups`.
+14. **Gesture TAP events** - Arch patches out TAP gesture event handling in the libinput C code (may be a newer libinput API issue). We may need this too depending on our libinput version.
+
+---
+
+## 13. dde-session-shell Research
+
+**Repository:** https://github.com/linuxdeepin/dde-session-shell
+**Latest Commit:** `3bd2a1f` (fix: fix lock screen window positioning on multi-monitor X11 setups)
+**No Tagged Releases** - Development tracked via commit history only (1,956 commits on master)
+
+### 13.1 What It Provides
+
+`dde-session-shell` provides **two main applications**:
+
+1. **`dde-lock`** - Lock screen functionality (protects privacy while system is running)
+2. **`lightdm-deepin-greeter`** - Login greeter for LightDM display manager
+
+The package "Provides: lightdm-greeter" in debian packaging, making it a full LightDM greeter implementation.
+
+### 13.2 Build System Architecture
+
+The build uses CMake with **dual-mode support** for Qt5 (v20) and Qt6 (snipe):
+
+```cmake
+# Auto-detection logic (lines 31-45 in CMakeLists.txt)
+if (NOT DDE_SESSION_SHELL_SNIPE)
+    find_package(Qt6 COMPONENTS Core QUIET)
+endif ()
+
+if (DDE_SESSION_SHELL_SNIPE OR Qt6_FOUND)
+    set(QT_VERSION_MAJOR 6)
+    set(DTK_VERSION_MAJOR 6)
+else ()
+    set(QT_VERSION_MAJOR 5)  # v20 mode
+    set(DTK_VERSION_MAJOR "")
+endif ()
+```
+
+For DDE 25 / NixOS packaging: **Use Qt6 mode** by ensuring Qt6 is findable or setting `DDE_SESSION_SHELL_SNIPE`.
+
+### 13.3 The liblightdm-qt6-3 Blocker
+
+**Critical Finding:** Both `dde-lock` AND `lightdm-deepin-greeter` link against `${Greeter_LIBRARIES}`:
+
+```cmake
+# Line 62 (v20 mode)
+pkg_check_modules(Greeter REQUIRED liblightdm-qt5-3)
+
+# Line 66 (snipe/Qt6 mode)
+pkg_check_modules(Greeter REQUIRED liblightdm-qt6-3)
+
+# Line 298 (dde-lock links it)
+target_link_libraries(dde-lock PRIVATE
+    ${Greeter_LIBRARIES}
+    ...
+)
+
+# Line 375 (lightdm-deepin-greeter links it)
+target_link_libraries(lightdm-deepin-greeter PRIVATE
+    ${Greeter_LIBRARIES}
+    ...
+)
+```
+
+**However**, after analyzing the source code:
+
+#### dde-lock Does NOT Use LightDM APIs
+
+- **No `#include <QLightDM/*>` headers** in any dde-lock or session-widgets source files
+- **No `QLightDM::Greeter` objects** instantiated in dde-lock code
+- **Only place LightDM is referenced**: `AuthObjectType::LightDM` enum in `auth_custom.h` (just a metadata flag for plugin communication, not actual LightDM API usage)
+
+The `${Greeter_LIBRARIES}` link is **spurious** for dde-lock. It's linked because both executables share `${SESSION_WIDGETS}` sources in their build, but dde-lock never calls LightDM functions.
+
+#### lightdm-deepin-greeter DOES Use LightDM APIs
+
+Files using QLightDM:
+- `src/lightdm-deepin-greeter/greeterworker.h` - `#include <QLightDM/Greeter>` and `#include <QLightDM/SessionsModel>`
+- `src/lightdm-deepin-greeter/greeterworker.cpp` - Instantiates `QLightDM::Greeter` object
+- `src/lightdm-deepin-greeter/sessionwidget.cpp` - Uses LightDM session model
+- `src/lightdm-deepin-greeter/sessionwidget.h` - Header for session widget
+
+### 13.4 LightDM Qt6 Support Status
+
+**Canonical LightDM upstream:**
+- **Only supports Qt5** (`liblightdm-qt5-3`)
+- No Qt6 support in official releases (latest: v1.32.0, July 2022)
+- Repository: https://github.com/canonical/lightdm
+- `configure.ac` only has `--enable-liblightdm-qt5` flag
+
+**NixOS nixpkgs lightdm package:**
+- Located at: `pkgs/by-name/li/lightdm/package.nix`
+- Supports Qt5 via `withQt5` option: `lightdm.override { withQt5 = true; }`
+- Builds `liblightdm-qt5-3` when enabled
+- **No Qt6 support available**
+
+### 13.5 Workaround Strategies
+
+#### Option 1: Build dde-lock Separately (RECOMMENDED)
+
+Since dde-lock doesn't actually use LightDM APIs, we can:
+
+1. **Patch CMakeLists.txt** to make `Greeter_LIBRARIES` optional or remove it from dde-lock link line
+2. **Build only dde-lock** for the initial NixOS port
+3. **Skip lightdm-deepin-greeter** until upstream or community provides `liblightdm-qt6-3`
+
+**Patch approach:**
+```cmake
+# Remove line 298 from dde-lock target_link_libraries:
+-    ${Greeter_LIBRARIES}
+
+# Or make it conditional:
+if (TARGET lightdm-deepin-greeter)
+    pkg_check_modules(Greeter REQUIRED liblightdm-qt6-3)
+endif()
+```
+
+**Benefits:**
+- Lock screen works without LightDM dependency
+- Can use with any display manager (GDM, SDDM, etc.)
+- Most users need lock screen, not custom greeter
+
+#### Option 2: Use dde-session-shell-snipe Repository
+
+The research document mentions "dde-session-shell has a dedicated deepin 25 repo: dde-session-shell-snipe (Qt6-only)".
+
+**TODO:** Investigate if this separate repo has different LightDM handling or if it's just the snipe branch.
+
+#### Option 3: Port liblightdm-qt to Qt6
+
+**Effort:** MEDIUM-HIGH
+**Scope:** Fork Canonical's `liblightdm-qt` and port Qt5 → Qt6
+**Risk:** Maintenance burden, ABI compatibility issues
+
+This would be a **separate project** and likely not worth it for initial DDE revival.
+
+#### Option 4: Wait for Upstream
+
+Deepin developers must have solved this for DDE 25. Possible scenarios:
+1. They maintain internal `liblightdm-qt6` fork
+2. They switched to different display manager integration
+3. The snipe branch has conditional compilation
+
+**Action:** Check Deepin's build system for how they handle this.
+
+### 13.6 Dependency Analysis
+
+#### Build Dependencies (Qt6 Mode)
+
+From `debian/control` and `CMakeLists.txt`:
+
+**Required:**
+- Qt6 (Core, Widgets, DBus, Svg, Network, LinguistTools)
+- Dtk6 (Widget, Core, Tools)
+- PAM
+- xcb-ewmh, x11, xi, xcursor, xfixes, xrandr, xext, xtst
+- OpenSSL (libcrypto, libssl)
+- **liblightdm-qt6-3** (BLOCKER - not in nixpkgs)
+
+**Not required for Qt6 mode:**
+- KF5Wayland (only in v20/Qt5 mode)
+- Qt5X11Extras (only in v20 mode)
+- dframeworkdbus (only in v20 mode)
+- gsettings-qt (only in v20 mode)
+
+#### Runtime Dependencies
+
+From `debian/control`:
+- deepin-desktop-schemas (≥5.9.14)
+- dde-daemon (≥5.13.12)
+- startdde (≥5.10.24)
+- deepin-authenticate (≥1.2.27)
+- dde-dconfig-daemon
+- dde-wayland-config (≥1.0.10-1)
+- x11-xserver-utils
+- xsettingsd
+- dbus-x11
+- libssl1.1
+
+**Critical:** "lightdm-deepin-greeter strongly relies on the com.deepin.daemon.Accounts service" from dde-daemon.
+
+#### Shared Widget Code
+
+Both executables share 18,000+ lines of common code:
+- `${GLOBAL_UTILS}` - Global utility functions
+- `${GLOBAL_UTILS_DBUS}` - D-Bus interface code
+- `${WIDGETS}` - General widget components
+- `${SESSION_WIDGETS}` - Session-level widgets
+- `${AUTHENTICATE}` - Authentication library (libdde-auth)
+- `${INTERFACE}` - Interface definitions
+- `${PLUGIN_MANAGER}` - Plugin management system
+
+This shared code does NOT use LightDM APIs.
+
+### 13.7 Components Built
+
+The package builds **3 executables** (v20 mode) or **2 executables** (snipe/Qt6 mode):
+
+1. **`dde-lock`** - Lock screen (BOTH modes)
+2. **`lightdm-deepin-greeter`** - LightDM greeter (BOTH modes)
+3. **`greeter-display-setting`** - Display settings for greeter (v20 ONLY)
+
+Additional components:
+- **`lighter-greeter`** subdirectory (v20 only) - Lightweight greeter variant
+- **`pam-inhibit-autologin`** - PAM module to block autologin
+- **Plugins** - Extensibility system
+
+### 13.8 Lock Screen vs Greeter Separation
+
+**Lock Screen (dde-lock):**
+- Runs in **user session** after login
+- Displays when user locks screen (Ctrl+Alt+L, idle timeout, etc.)
+- Uses D-Bus services: `com.deepin.dde.lockFront`, `com.deepin.dde.shutdownFront`
+- Integrates with deepin-authenticate for biometric/password auth
+
+**Greeter (lightdm-deepin-greeter):**
+- Runs as **LightDM child process** before login
+- Displays at boot/logout for user selection and authentication
+- Uses LightDM APIs (`QLightDM::Greeter`) to communicate with LightDM daemon
+- Cannot run without LightDM
+
+**Conclusion:** These are separate use cases. Lock screen can exist independently.
+
+### 13.9 Configuration Files Installed
+
+- `/usr/share/dde-session-shell/dde-session-shell.conf` - Main config
+- `/usr/share/deepin-authentication/privileges/lightdm-deepin-greeter.conf` - Auth privileges
+- `/etc/lightdm/deepin/qt-theme.ini` - Qt theme for greeter
+- `/usr/share/lightdm/lightdm.conf.d/50-deepin.conf` - LightDM integration
+- `/usr/share/xgreeters/lightdm-deepin-greeter.desktop` - Greeter registration
+- `/usr/share/applications/dde-lock.desktop` - Lock screen desktop entry
+- `/etc/xdg/autostart/dde-lock.desktop` - Autostart lock screen
+
+Plus D-Bus service files in `/usr/share/dbus-1/services/`.
+
+### 13.10 PAM Configuration
+
+Installs PAM configs (from `files/pam.d/*`):
+- Handles authentication for both lock and greeter
+- Must be integrated into NixOS PAM system via `security.pam.services`
+
+### 13.11 Packaging Recommendation
+
+**Phase 1 (Initial Port):**
+1. Package **dde-lock only**
+2. Patch out `${Greeter_LIBRARIES}` dependency
+3. Set `DDE_SESSION_SHELL_SNIPE=ON` or ensure Qt6 is detected
+4. Build with: `cmake -DDDE_SESSION_SHELL_SNIPE=ON` or just provide Qt6
+5. Install only `dde-lock` binary + lock-related configs
+6. Skip greeter until liblightdm-qt6 situation resolves
+
+**Phase 2 (Greeter Support):**
+1. Investigate dde-session-shell-snipe repo for alternative approach
+2. OR: Package liblightdm with Qt6 support (requires upstream fork)
+3. OR: Wait for Deepin to upstream their Qt6 solution
+4. Build full package with greeter support
+
+### 13.12 NixOS Integration Points
+
+**For dde-lock:**
+- Systemd user service (if needed for autostart)
+- D-Bus session services registration
+- PAM config for `dde-lock` authentication
+- Desktop entry in `/etc/xdg/autostart/`
+- Integration with deepin-authenticate
+
+**For lightdm-deepin-greeter (future):**
+- Add to `services.xserver.displayManager.lightdm.greeters.enable`
+- Configure LightDM to use deepin greeter
+- PAM config for `lightdm-deepin-greeter`
+- Install xgreeters desktop file
+
+### 13.13 Blocker Status Summary
+
+| Component | liblightdm-qt6-3 Needed? | Can Build Without? |
+|-----------|--------------------------|-------------------|
+| dde-lock | No (spurious link only) | **YES** - Just patch CMakeLists.txt |
+| lightdm-deepin-greeter | Yes (actual API usage) | **NO** - Hard requirement |
+| session-widgets | No (shared code) | YES |
+
+**Conclusion:** The blocker can be worked around by building dde-lock separately, which is the higher-priority component for desktop usability.

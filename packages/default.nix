@@ -61,11 +61,12 @@ let
       dde-launchpad = callPackage ./core/dde-launchpad { };
       dde-control-center = callPackage ./core/dde-control-center { };
       # dde-file-manager: skipped — needs libdfm6-*, libdeepin-pdfium, too many missing deps
-      # dde-session-shell: skipped — still Qt5 only, not ported to Qt6
+      # dde-session-shell: only dde-lock is built (greeter needs liblightdm-qt6-3 which is not in nixpkgs)
 
       #### SESSION (Layer 12)
       dde-session = callPackage ./core/dde-session { };
       dde-session-ui = callPackage ./core/dde-session-ui { };
+      dde-session-shell = callPackage ./core/dde-session-shell { };
 
       #### ARTWORK
       deepin-icon-theme = callPackage ./artwork/deepin-icon-theme { };

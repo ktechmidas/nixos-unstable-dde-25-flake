@@ -83,7 +83,7 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   meta = {
-    description = "Session UI module for DDE (shutdown, lock, OSD, etc.)";
+    description = "Session UI dialogs for DDE (warnings, low power, welcome, bluetooth, etc.)";
     homepage = "https://github.com/linuxdeepin/dde-session-ui";
     license = lib.licenses.gpl3Plus;
     platforms = lib.platforms.linux;
