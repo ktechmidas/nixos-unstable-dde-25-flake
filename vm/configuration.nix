@@ -10,7 +10,9 @@
       diskSize = 8192;
       resolution = { x = 1920; y = 1080; };
       qemu.options = [
-        "-vga virtio"
+        "-vga none"
+        "-device virtio-vga-gl"
+        "-display gtk,gl=on"
       ];
     };
   };
@@ -32,6 +34,8 @@
   environment.systemPackages = with pkgs; [
     xterm
     nano
+    feh          # wallpaper setter (workaround for missing dde-file-manager desktop plugin)
+    mesa-demos   # glxinfo for GL debugging
   ];
 
   # Display manager — use LightDM with autologin

@@ -142,6 +142,14 @@ in
       deepin.dde-appearance                # dde-fakewm.service (user)
     ];
 
+    # Default kwinrc — enable compositing (DConfig for org.kde.kwin.compositing
+    # is missing upstream, so kwin won't enable compositing without this)
+    environment.etc."xdg/kwinrc".text = lib.mkDefault ''
+      [Compositing]
+      Enabled=true
+      Backend=OpenGL
+    '';
+
     # Environment variables for the session
     environment.sessionVariables = {
       # Make DTK and Qt find our plugins and themes
