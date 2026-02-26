@@ -14,37 +14,46 @@ in
 
   config = lib.mkIf cfg.enable {
 
-    # X11 session
+    # X11 session via deepin-kwin
     services.xserver.enable = true;
 
     services.displayManager.sessionPackages = [
-      (pkgs.writeTextDir "share/xsessions/deepin.desktop" ''
+      ((pkgs.writeTextDir "share/xsessions/deepin.desktop" ''
         [Desktop Entry]
         Name=Deepin
         Comment=Deepin Desktop Environment
-        Exec=${deepin.dde-session}/bin/dde-session
+        Exec=${deepin.startdde}/bin/startdde
         Type=Application
         DesktopNames=Deepin
-      '')
+      '').overrideAttrs {
+        passthru.providedSessions = [ "deepin" ];
+      })
     ];
 
     # D-Bus services
     services.dbus.packages = [
       deepin.dde-shell
       deepin.dde-session
+      deepin.dde-session-ui
       deepin.dde-application-manager
       deepin.deepin-service-manager
       deepin.dde-polkit-agent
       deepin.dde-appearance
+      deepin.dde-daemon
+      deepin.dde-api
+      deepin.dde-control-center
     ];
 
-    # Systemd user units
+    # Systemd user/system units
     systemd.packages = [
       deepin.dde-shell
       deepin.dde-session
+      deepin.dde-session-ui
       deepin.dde-application-manager
       deepin.deepin-service-manager
       deepin.dde-appearance
+      deepin.dde-daemon
+      deepin.dde-api
     ];
 
     # Environment variables for the session
@@ -57,6 +66,8 @@ in
       QT_QPA_PLATFORM_PLUGIN_PATH = [
         "${deepin.qt6platform-plugins}/lib/qt-6/plugins/platforms"
       ];
+      # DDE needs to find its own schemas
+      DDE_KWIN_DIR = "${deepin.deepin-kwin}";
     };
 
     # XDG data dirs for icon themes, wallpapers, schemas, etc.
@@ -69,9 +80,14 @@ in
       "/share/dde-shell"
       "/share/dde-application-manager"
       "/share/deepin"
+      "/share/dbus-1"
+      "/share/polkit-1"
+      "/share/applications"
+      "/lib/deepin-daemon"
+      "/lib/deepin-api"
     ];
 
-    # System packages
+    # System packages — everything DDE needs at runtime
     environment.systemPackages = with deepin; [
       # DTK libraries
       dtkcommon
@@ -83,6 +99,17 @@ in
       # Platform integration
       qt6platform-plugins
       qt6integration
+      gsettings-qt6
+
+      # Window manager
+      deepin-kwin
+
+      # Session starter
+      startdde
+
+      # Go services
+      dde-api
+      dde-daemon
 
       # Shell and desktop
       dde-shell
@@ -90,8 +117,10 @@ in
       dde-tray-loader
       dde-application-manager
       dde-session
+      dde-session-ui
       dde-polkit-agent
       dde-appearance
+      dde-control-center
 
       # Core services
       deepin-service-manager
@@ -100,8 +129,10 @@ in
 
       # Artwork
       deepin-icon-theme
+      deepin-desktop-theme
       deepin-sound-theme
       deepin-wallpapers
+      dde-account-faces
     ];
 
     # GSettings schemas
@@ -115,6 +146,11 @@ in
     # Required system services
     services.upower.enable = lib.mkDefault true;
     services.accounts-daemon.enable = lib.mkDefault true;
+    services.udisks2.enable = lib.mkDefault true;
+    services.power-profiles-daemon.enable = lib.mkDefault true;
+
+    # NetworkManager for dde-daemon network management
+    networking.networkmanager.enable = lib.mkDefault true;
 
     # Fonts
     fonts.packages = lib.mkDefault (with pkgs; [

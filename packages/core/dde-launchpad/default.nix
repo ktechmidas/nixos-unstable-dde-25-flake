@@ -8,6 +8,7 @@
   glib,
   systemd,
   appstream,
+  kdePackages,
   dtkcommon,
   dtk6core,
   dtk6gui,
@@ -43,6 +44,7 @@ stdenv.mkDerivation (finalAttrs: {
     glib
     systemd
     appstream
+    kdePackages.appstream-qt
     dtkcommon
     dtk6core
     dtk6gui
@@ -50,6 +52,13 @@ stdenv.mkDerivation (finalAttrs: {
     dde-shell
     dde-application-manager
   ];
+
+  # After cmake configure, fix the generated install scripts to redirect dde-shell paths to $out
+  postConfigure = ''
+    find . -name "cmake_install.cmake" -exec sed -i \
+      -e "s|${dde-shell}/share/dde-shell|$out/share/dde-shell|g" \
+      -e "s|${dde-shell}/lib/dde-shell|$out/lib/dde-shell|g" {} +
+  '';
 
   cmakeFlags = [
     "-DBUILD_TEST=OFF"

@@ -41,6 +41,11 @@ stdenv.mkDerivation (finalAttrs: {
     substituteInPlace src/gsettings-qt.pc.in \
       --replace-fail "\''${prefix}/@CMAKE_INSTALL_LIBDIR@" '@CMAKE_INSTALL_FULL_LIBDIR@' \
       --replace-fail "\''${prefix}/@QT_INCLUDE_DIR@/QGSettings" '@QT_FULL_INCLUDE_DIR@/QGSettings'
+    # Fix Cflags to include both paths:
+    # - include/qt6/QGSettings for #include <QGSettings> (deepin-kwin style)
+    # - include/qt6 for #include <QGSettings/QGSettings> (Qt style)
+    substituteInPlace src/gsettings-qt.pc.in \
+      --replace-fail 'Cflags: -I''${includedir}' 'Cflags: -I''${includedir} -I@QT_FULL_INCLUDE_DIR@'
 
     substituteInPlace GSettings/CMakeLists.txt \
       --replace-fail "\''${CMAKE_INSTALL_LIBDIR}/qt\''${QT_VERSION_MAJOR}/qml" "$out/${qt6Packages.qtbase.qtQmlPrefix}"

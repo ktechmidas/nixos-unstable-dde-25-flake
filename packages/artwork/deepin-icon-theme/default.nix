@@ -31,6 +31,9 @@ stdenv.mkDerivation (finalAttrs: {
 
   dontBuild = true;
 
+  # Upstream has dangling symlinks (e.g. uos-activator -> deepin-license-activator)
+  dontCheckForBrokenSymlinks = true;
+
   meta = {
     description = "Deepin icon theme";
     homepage = "https://github.com/linuxdeepin/deepin-icon-theme";
