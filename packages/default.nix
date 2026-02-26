@@ -26,6 +26,7 @@ let
 
       #### SUPPORT LIBRARIES
       gsettings-qt6 = callPackage ./library/gsettings-qt6 { };
+      deepin-pw-check = callPackage ./library/deepin-pw-check { };
 
       #### PROTOCOL DEFINITIONS (Layer 1)
       deepin-wayland-protocols = callPackage ./library/deepin-wayland-protocols { };
@@ -57,20 +58,20 @@ let
 
       #### DESKTOP APPS (Layer 11)
       dde-launchpad = callPackage ./core/dde-launchpad { };
-      # dde-control-center = callPackage ./core/dde-control-center { };
-      # dde-file-manager = callPackage ./core/dde-file-manager { };
-      # dde-session-shell = callPackage ./core/dde-session-shell { };
+      dde-control-center = callPackage ./core/dde-control-center { };
+      # dde-file-manager: skipped — needs libdfm6-*, libdeepin-pdfium, too many missing deps
+      # dde-session-shell: skipped — still Qt5 only, not ported to Qt6
 
       #### SESSION (Layer 12)
       dde-session = callPackage ./core/dde-session { };
-      # dde-session-ui = callPackage ./core/dde-session-ui { };
+      dde-session-ui = callPackage ./core/dde-session-ui { };
 
       #### ARTWORK
       deepin-icon-theme = callPackage ./artwork/deepin-icon-theme { };
-      # deepin-desktop-theme = callPackage ./artwork/deepin-desktop-theme { };
+      deepin-desktop-theme = callPackage ./artwork/deepin-desktop-theme { };
       deepin-sound-theme = callPackage ./artwork/deepin-sound-theme { };
       deepin-wallpapers = callPackage ./artwork/deepin-wallpapers { };
-      # dde-account-faces = callPackage ./artwork/dde-account-faces { };
+      dde-account-faces = callPackage ./artwork/dde-account-faces { };
 
       #### MISC
       deepin-desktop-base = callPackage ./misc/deepin-desktop-base { };

@@ -1,0 +1,15 @@
+diff --git a/lib/word_check.c b/lib/word_check.c
+index fc32446..ab70346 100644
+--- a/lib/word_check.c
++++ b/lib/word_check.c
+@@ -394,8 +394,9 @@ int word_check(const char* pw,const char* dict_path) {
+     for (int i = 0; r_destructors[i]; i++)
+     {
+         char *a;
++	char area[STRINGSIZE];
+
+-        if (!(a = Mangle((char*)pw, r_destructors[i])))
++        if (!(a = Mangle((char*)pw, r_destructors[i], area)))
+         {
+             continue;
+         }
