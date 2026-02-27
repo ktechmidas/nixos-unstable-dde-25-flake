@@ -36,6 +36,19 @@ stdenv.mkDerivation (finalAttrs: {
     "-DCMAKE_INSTALL_SYSCONFDIR=${placeholder "out"}/etc"
   ];
 
+  # Override the compile-time plugin config and library search paths.
+  # By default, deepin-service-manager hardcodes its own store path for
+  # SERVICE_CONFIG_DIR and SERVICE_LIB_DIR.  Other packages (dde-appearance,
+  # dde-daemon, etc.) install their plugin JSON configs and .so libraries
+  # into their own store paths, which are linked into
+  # /run/current-system/sw/ via environment.pathsToLink.
+  preConfigure = ''
+    sed -i 's|"''${CMAKE_INSTALL_PREFIX}/share/deepin-service-manager/"|"/run/current-system/sw/share/deepin-service-manager/"|' \
+      src/CMakeLists.txt
+    sed -i 's|"''${CMAKE_INSTALL_FULL_LIBDIR}/deepin-service-manager/"|"/run/current-system/sw/lib/deepin-service-manager/"|' \
+      src/CMakeLists.txt
+  '';
+
   # Fix hardcoded /usr/bin paths in systemd service files
   postInstall = ''
     find $out -name "*.service" -exec sed -i \

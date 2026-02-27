@@ -7,28 +7,29 @@
 
 ---
 
-## Current Status: 36 Packages Building, Full Desktop Session Running
+## Current Status: 40 Packages Building, Desktop Running on Real Hardware
 
-All 36 packages build successfully against nixos-unstable with Qt 6.10.
-The full DDE 25 desktop session runs in a QEMU VM with zero failed services
-(both system-level and user-level). The NixOS module has been added to real
-hardware configuration alongside GNOME, selectable from GDM session menu.
+40 packages (36 original + docparser, deepin-pdfium, util-dfm, dde-file-manager)
+build successfully against nixos-unstable with Qt 6.10. DDE runs on real hardware
+(ASUS laptop, AMD Cezanne iGPU + NVIDIA RTX 3080 Mobile) via LightDM.
 
-**What works:**
-- Full session startup chain: dde-session → deepin-kwin → dde-shell
-- Dock/panel (dde-shell), launcher (dde-launchpad), system tray (dde-tray-loader)
-- Lock screen (dde-lock from dde-session-shell)
-- Control center (dde-control-center)
+**What works on real hardware:**
+- Full session startup chain: LightDM → dde-session → deepin-kwin → dde-shell
+- Dock/panel (dde-shell) with program icons, launcher (dde-launchpad)
+- Desktop wallpaper (via dde-file-manager's desktop plugin)
+- Icons loading (Papirus fallback, Appearance D-Bus service, XSettings)
 - All Go services (dde-api, dde-daemon, startdde)
-- Bloom cursor theme from deepin-icon-theme
-- Wallpapers, sounds, icons, desktop themes
-- Compositing via kwinrc default (workaround for missing DConfig schemas)
+- Bloom cursor theme, compositing via deepin-kwin on AMD iGPU
+- 15 tray plugins loading via trayplugin-loader
 
-**Known limitations:**
-- Desktop background is black — the `org.deepin.ds.desktop` wallpaper plugin ships with `dde-file-manager` which is not yet packaged
-- Dock renders transparent/translucent, may appear invisible against black background in VM (should work on real hardware with proper compositing)
+**Known issues (real hardware):**
+- **Tray icons render as black boxes** — see "Tray Black Box Investigation" below
+- **Tray QML takes ~3 minutes to load** — `org.deepin.ds.dock.tray` async QML compilation is extremely slow; after loading, tray _may_ work but timing makes it hard to confirm
+- **Software rendering required** — `QT_QUICK_BACKEND=software` needed; GPU rendering causes all QML async loading to hang indefinitely
+- dde-control-center shows white box (plugin naming mismatch: expects `system.so`, has `libsystem_qml.so`)
+- dxcb "Failed to enable NoTitlebar" spam (cosmetic, non-critical)
 - `lightdm-deepin-greeter` not built — needs `liblightdm-qt6-3` which doesn't exist in nixpkgs
-- No deepin-terminal or deepin-editor — both are still Qt5/DTK5, incompatible with Qt6-only stack
+- No deepin-terminal or deepin-editor — both are still Qt5/DTK5
 
 ---
 

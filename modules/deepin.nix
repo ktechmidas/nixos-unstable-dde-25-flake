@@ -11,6 +11,15 @@ let
   # GLib's GSETTINGS_SCHEMA_DIR only supports a single directory, so we
   # merge schemas from deepin-desktop-schemas, startdde, and dde-daemon
   # into one compiled database.
+  # Default wallpaper — dde-file-manager's background plugin falls back to
+  # /run/current-system/sw/share/backgrounds/default_background.jpg which
+  # doesn't exist on NixOS. Provide a symlink to an actual wallpaper.
+  defaultWallpaper = pkgs.runCommand "deepin-default-wallpaper" {} ''
+    mkdir -p $out/share/backgrounds
+    ln -s ${deepin.deepin-wallpapers}/share/wallpapers/deepin/flow-light.png \
+      $out/share/backgrounds/default_background.jpg
+  '';
+
   deepinSchemas = pkgs.runCommand "deepin-combined-schemas" {
     nativeBuildInputs = [ pkgs.glib ];
   } ''
@@ -57,6 +66,7 @@ in
       deepin.dde-daemon
       deepin.dde-api
       deepin.dde-control-center
+      deepin.dde-file-manager
     ];
 
     # System user for dde-dconfig-daemon
@@ -156,6 +166,7 @@ in
       QT_PLUGIN_PATH = [
         "${deepin.qt6platform-plugins}/${pkgs.qt6Packages.qtbase.qtPluginPrefix}"
         "${deepin.qt6integration}/${pkgs.qt6Packages.qtbase.qtPluginPrefix}"
+        "${pkgs.qt6Packages.qtimageformats}/${pkgs.qt6Packages.qtbase.qtPluginPrefix}"
       ];
       QT_QPA_PLATFORM_PLUGIN_PATH = [
         "${deepin.qt6platform-plugins}/${pkgs.qt6Packages.qtbase.qtPluginPrefix}/platforms"
@@ -167,18 +178,32 @@ in
         "${deepin.dde-shell}/lib/qt6/qml"
         "${deepin.dde-launchpad}/lib/qt6/qml"
         "${pkgs.qt6Packages.qt5compat}/${pkgs.qt6Packages.qtbase.qtQmlPrefix}"
+        "${pkgs.qt6Packages.qtwayland}/${pkgs.qt6Packages.qtbase.qtQmlPrefix}"
       ];
+      # dde-shell plugin .so search path (packages like dde-file-manager
+      # install plugins to their own store paths, linked via /run/current-system/sw)
+      DDE_SHELL_PLUGIN_PATH = "/run/current-system/sw/lib/dde-shell";
+      # Tray plugin loader executable (lives in dde-tray-loader, not dde-shell)
+      TRAY_LOADER_EXECUTE_PATH = "${deepin.dde-tray-loader}/libexec/trayplugin-loader";
+      # Deepin platform theme — makes Qt use Deepin's icon theme, fonts, etc.
+      QT_QPA_PLATFORMTHEME = "deepin";
       # Cursor theme from deepin-icon-theme
       XCURSOR_THEME = "bloom";
       XCURSOR_SIZE = "24";
       # DDE needs to find its own schemas
       DDE_KWIN_DIR = "${deepin.deepin-kwin}";
+      # Force Mesa (AMD iGPU) for GLX and EGL on hybrid GPU systems.
+      # Without these, libglvnd picks NVIDIA's implementations, creating
+      # GL contexts on the dGPU while the X server runs on the iGPU.
+      __GLX_VENDOR_LIBRARY_NAME = "mesa";
+      __EGL_VENDOR_LIBRARY_FILENAMES = "/run/opengl-driver/share/glvnd/egl_vendor.d/50_mesa.json";
     };
 
     # XDG data dirs for icon themes, wallpapers, schemas, etc.
     environment.pathsToLink = [
       "/share/icons"
       "/share/wallpapers"
+      "/share/backgrounds"
       "/share/sounds"
       "/share/dsg"
       "/share/glib-2.0"
@@ -192,6 +217,9 @@ in
       "/lib/deepin-daemon"
       "/lib/deepin-api"
       "/lib/dde-shell"
+      "/lib/dde-dock"
+      "/share/deepin-service-manager"
+      "/lib/deepin-service-manager"
     ];
 
     # System packages — everything DDE needs at runtime
@@ -228,6 +256,7 @@ in
       dde-launchpad
       dde-tray-loader
       dde-application-manager
+      dde-file-manager                       # desktop plugin (org.deepin.ds.desktop) + file manager
       dde-session
       dde-session-ui
       dde-session-shell                    # dde-lock (lock screen)
@@ -247,7 +276,10 @@ in
       deepin-sound-theme
       deepin-wallpapers
       dde-account-faces
-    ]);
+    ]) ++ [
+      pkgs.papirus-icon-theme            # bloom icon theme inherits from Papirus
+      defaultWallpaper                   # provides share/backgrounds/default_background.jpg
+    ];
 
     # GSettings schemas — combined from all DDE packages
     environment.variables = {

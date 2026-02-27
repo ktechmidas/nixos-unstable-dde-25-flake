@@ -87,6 +87,16 @@ buildGoModule rec {
     runHook postInstall
   '';
 
+  # dde-appearance requests org.deepin.XSettings under appid
+  # "org.deepin.dde.daemon" (DDEDAEMONAPPID in commondefine.h), but the
+  # Makefile installs it under "org.deepin.startdde".  DConfig has no
+  # cross-appid fallback, so copy it to the expected location.
+  postInstall = ''
+    mkdir -p $out/share/dsg/configs/org.deepin.dde.daemon
+    cp $out/share/dsg/configs/org.deepin.startdde/org.deepin.XSettings.json \
+      $out/share/dsg/configs/org.deepin.dde.daemon/org.deepin.XSettings.json
+  '';
+
   meta = {
     description = "Starter of deepin desktop environment";
     homepage = "https://github.com/linuxdeepin/startdde";

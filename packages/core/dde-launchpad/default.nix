@@ -53,11 +53,30 @@ stdenv.mkDerivation (finalAttrs: {
     dde-application-manager
   ];
 
-  # After cmake configure, fix the generated install scripts to redirect dde-shell paths to $out
+  # After cmake configure, fix the generated install scripts to redirect
+  # dde-shell paths and Qt QML module paths to $out
   postConfigure = ''
     find . -name "cmake_install.cmake" -exec sed -i \
       -e "s|${dde-shell}/share/dde-shell|$out/share/dde-shell|g" \
-      -e "s|${dde-shell}/lib/dde-shell|$out/lib/dde-shell|g" {} +
+      -e "s|${dde-shell}/lib/dde-shell|$out/lib/dde-shell|g" \
+      -e "s|${qt6Packages.qtbase}/${qt6Packages.qtbase.qtQmlPrefix}|$out/lib/qt6/qml|g" {} +
+  '';
+
+  # Create on-disk qmldir files for QML module discovery.
+  # dde-launchpad's 3 QML modules (org.deepin.launchpad, .models, .windowed)
+  # are embedded in launchpadcommon.so as Qt resources via STATIC linking.
+  # The QML engine needs on-disk qmldir to discover them; "prefer" redirects
+  # to the resource-embedded content at :/qt/qml/...
+  postInstall = ''
+    for mod in \
+      "org/deepin/launchpad" \
+      "org/deepin/launchpad/models" \
+      "org/deepin/launchpad/windowed"; do
+      mkdir -p "$out/lib/qt6/qml/$mod"
+      uri=$(echo "$mod" | tr '/' '.')
+      printf 'module %s\nprefer :/qt/qml/%s/\n' "$uri" "$mod" \
+        > "$out/lib/qt6/qml/$mod/qmldir"
+    done
   '';
 
   cmakeFlags = [

@@ -28,6 +28,11 @@ let
       gsettings-qt6 = callPackage ./library/gsettings-qt6 { };
       deepin-pw-check = callPackage ./library/deepin-pw-check { };
 
+      #### FILE MANAGER DEPENDENCIES
+      docparser = callPackage ./library/docparser { };
+      deepin-pdfium = callPackage ./library/deepin-pdfium { };
+      util-dfm = callPackage ./library/util-dfm { };
+
       #### PROTOCOL DEFINITIONS (Layer 1)
       deepin-wayland-protocols = callPackage ./library/deepin-wayland-protocols { };
       treeland-protocols = callPackage ./library/treeland-protocols { };
@@ -60,7 +65,7 @@ let
       #### DESKTOP APPS (Layer 11)
       dde-launchpad = callPackage ./core/dde-launchpad { };
       dde-control-center = callPackage ./core/dde-control-center { };
-      # dde-file-manager: skipped — needs libdfm6-*, libdeepin-pdfium, too many missing deps
+      dde-file-manager = callPackage ./apps/dde-file-manager { };
       # dde-session-shell: only dde-lock is built (greeter needs liblightdm-qt6-3 which is not in nixpkgs)
 
       #### SESSION (Layer 12)

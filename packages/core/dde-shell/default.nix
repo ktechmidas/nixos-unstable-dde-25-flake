@@ -90,6 +90,9 @@ stdenv.mkDerivation (finalAttrs: {
     # Redirect systemd user unit install to our output
     find . -name "CMakeLists.txt" -exec \
       sed -i "s|\''${SYSTEMD_USER_UNIT_DIR}|$out/lib/systemd/user|g" {} +
+    # Fix hardcoded tray plugin dirs — plugins are symlinked via pathsToLink
+    sed -i 's|/usr/lib/dde-dock/|/run/current-system/sw/lib/dde-dock/|g' \
+      panels/dock/loadtrayplugins.h
   '';
 
   # Inject QML paths for DTK modules that install to non-standard lib/qt6/qml.
@@ -98,6 +101,34 @@ stdenv.mkDerivation (finalAttrs: {
   qtWrapperArgs = [
     "--prefix" "QML2_IMPORT_PATH" ":" "${dtk6declarative}/lib/qt6/qml"
   ];
+
+  # Override QtWayland.Compositor QML module in the application directory.
+  # Qt6 searches the app dir ($out/bin/) BEFORE resource paths. The upstream
+  # qmldir embeds a "prefer :/qt-project.org/imports/..." directive which makes
+  # Qt look for the plugin in resources (where .so files can't exist). By
+  # placing a qmldir without the prefer directive in bin/, the QML engine finds
+  # the actual plugin on the filesystem first.
+  postInstall = let
+    qtwaylandQml = "${qt6Packages.qtwayland}/${qt6Packages.qtbase.qtQmlPrefix}/QtWayland/Compositor";
+  in ''
+    mkdir -p $out/bin/QtWayland/Compositor/qmlfiles
+    cat > $out/bin/QtWayland/Compositor/qmldir <<'QMLDIR'
+module QtWayland.Compositor
+plugin qwaylandcompositorplugin
+classname QWaylandCompositorPlugin
+typeinfo WaylandCompositor.qmltypes
+depends QtQuick
+WaylandCursorItem 6.0 qmlfiles/WaylandCursorItem.qml
+WaylandCursorItem 1.0 qmlfiles/WaylandCursorItem.qml
+WaylandOutputWindow 6.0 qmlfiles/WaylandOutputWindow.qml
+WaylandOutputWindow 1.0 qmlfiles/WaylandOutputWindow.qml
+QMLDIR
+    ln -s ${qtwaylandQml}/libqwaylandcompositorplugin.so $out/bin/QtWayland/Compositor/
+    ln -s ${qtwaylandQml}/WaylandCompositor.qmltypes $out/bin/QtWayland/Compositor/
+    for f in ${qtwaylandQml}/qmlfiles/*.qml; do
+      ln -s "$f" $out/bin/QtWayland/Compositor/qmlfiles/
+    done
+  '';
 
   # Ensure systemd user units don't go to systemd's store path
   SYSTEMD_USER_UNIT_DIR = "${placeholder "out"}/lib/systemd/user";
